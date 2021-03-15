@@ -34,9 +34,8 @@ make install
 3. Modify default-username to be the valid user name that could have the privileges of both manipulating MySQL Group Replication and MySQL.
 4. Modify log-file to be the valid file path.
 5. Modify worker-processes to be appropriate number that best suits the workload.
-6. Modify default-pool-size.
-   The total connections to MySQL is equal to default-pool-size plus worker-processes
-
+6. Modify default-pool-size appropriately.
+   
 ### 6. How to modify user.conf
 Modify password appropriately for both your applications and MySQL.
 
@@ -45,6 +44,7 @@ Modify password appropriately for both your applications and MySQL.
 2. Cetus only works for MySQL Group Replication.
 3. As for MySQL Group Replication, please use the modified version which could be downloaded at https://github.com/session-replay-tools/MySQL.
 4. Configure MySQL Group Replication before running cetus.
+5. The total connections to each MySQL is equal to default-pool-size plus worker-processes
 
 ## Bugs and feature requests:
 If you encounter any issues with the release, I would encourage you to file a bug report.
