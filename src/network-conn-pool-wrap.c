@@ -81,7 +81,7 @@ static void network_mysqld_con_idle_handle(int event_fd, short events,
         srv->complement_conn_flag = 1;
       }
 
-      g_message("%s:the server decided to close the connection:%d for sock:%p",
+      g_debug("%s:the server decided to close the connection:%d for sock:%p",
                 G_STRLOC, pool_entry->pool->cur_idle_connections,
                 pool_entry->sock);
     }
@@ -91,7 +91,7 @@ static void network_mysqld_con_idle_handle(int event_fd, short events,
       srv->complement_conn_flag = 1;
     }
     network_connection_pool_remove(pool_entry);
-    g_message("%s:idle connection timeout:%d for sock:%p", G_STRLOC,
+    g_debug("%s:idle connection timeout:%d for sock:%p", G_STRLOC,
               pool_entry->pool->cur_idle_connections, pool_entry->sock);
   }
 }
@@ -113,7 +113,7 @@ int network_pool_add_idle_conn(network_connection_pool *pool, chassis *srv,
   struct timeval timeout;
   timeout.tv_sec = surplus_time;
   timeout.tv_usec = 0;
-  g_message(
+  g_debug(
       "%s: ev:%p add network_mysqld_con_idle_handle for server:%p, fd:%d, "
       "timeout:%d",
       G_STRLOC, &(server->event), server, server->fd, surplus_time);
