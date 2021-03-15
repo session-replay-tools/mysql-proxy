@@ -1,5 +1,5 @@
 ## Introduction
-Cetus is a high performance, protocol aware proxy for MySQL Group Replication. 
+Cetus is a high performance, stable, protocol aware proxy for MySQL Group Replication. 
 
 ## Getting started
 
