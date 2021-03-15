@@ -4,12 +4,13 @@ Cetus is a high performance, protocol aware proxy for MySQL Group Replication.
 ## Getting started
 
 ### 1. Prerequisites
-cmake
-gcc
-glib2-devel （version >= 2.6.0)
-zlib-devel
-flex
-mysql-devel 5.6 or mysql-devel 5.7 or mariadb-devel
+1. cmake
+2. gcc
+3. glib2-devel （version >= 2.6.0)
+4. zlib-devel
+5. flex
+6. mysql-devel 5.6 or mysql-devel 5.7 or mariadb-devel
+7. jemalloc
 
 ### 2. How to compile
 1. Go to the cetus_mgr directory
