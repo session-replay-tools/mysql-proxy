@@ -1,0 +1,47 @@
+{
+    "variables": [
+        {
+            "name": "profiling",
+            "type": "int",
+            "allowed_values": ["*"],
+            "silent_values": ["*"]
+        },
+        {
+            "name": "sql_mode",
+            "type": "string-csv",
+            "allowed_values":  ["STRICT_TRANS_TABLES",
+                                "NO_AUTO_CREATE_USER",
+                                "NO_ENGINE_SUBSTITUTION"]
+        },
+        {
+            "name": "net_write_timeout",
+            "type": "int",
+            "allowed_values": ["*"],
+            "silent_values": ["*"]
+        },
+        {
+            "name": "sql_select_limit",
+            "type": "int",
+            "allowed_values": ["*"],
+            "silent_values": ["*"]
+        },
+        {
+            "name": "sql_auto_is_null",
+            "type": "string",
+            "allowed_values": ["*"],
+            "silent_values": ["*"]
+        },
+        {
+            "name": "time_zone",
+            "type": "string",
+            "allowed_values": ["*"],
+            "silent_values": ["*"]
+        },
+        {
+            "name": "connect_timeout",
+            "type": "string",
+            "allowed_values": ["*"],
+            "silent_values": ["10", "100"]
+        }
+    ]
+}
