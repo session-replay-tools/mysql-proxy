@@ -40,12 +40,14 @@ make install
 Modify password appropriately for both your applications and MySQL.
 
 ## Note
-1. Cetus could not be compiled under MySQL 8.0 development.
-2. Cetus only works for MySQL Group Replication.
-3. As for MySQL Group Replication, please use the modified version which could be downloaded at https://github.com/session-replay-tools/MySQL.
-4. Configure MySQL Group Replication before running cetus.
-5. The total num of connections to each MySQL is equal to default-pool-size plus worker-processes.
-6. Cetus runs only on Linux.
+1. Cetus runs only on Linux.
+2. Cetus could not be compiled under MySQL 8.0 development.
+3. Cetus only works for MySQL Group Replication.
+4. Cetus only supports mysql_native_password.
+5. As for MySQL Group Replication, please use the modified version which could be downloaded at https://github.com/session-replay-tools/MySQL.
+6. Configure MySQL Group Replication before running cetus.
+7. The total num of connections to each MySQL is equal to default-pool-size plus worker-processes.
+
 
 ## Bugs and feature requests:
 If you encounter any issues with the release, I would encourage you to file a bug report.
