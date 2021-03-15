@@ -48,5 +48,5 @@ Modify password appropriately for both your applications and MySQL.
 
 ## Bugs and feature requests:
 If you encounter any issues with the release, I would encourage you to file a bug report.
-Your feedback is really critical to myself and the rest of the team as we want to make Group Replication better.
+Your feedback is really critical to myself and the rest of the team as we want to make cetus better.
 
