@@ -287,7 +287,8 @@ static gtid_set_t *get_gtid_interval(const char *gtid, int previous_num) {
 
     return gtid_set;
   } else {
-    g_critical("unexpected count:%d, size:%d", count, gtid_set->size);
+    g_message("unexpected count:%d, gtid size:%d, gtid:%s", count,
+              gtid_set->size, gtid);
     free_gtid_set(gtid_set);
     return NULL;
   }
@@ -577,6 +578,9 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
   }
 
   gtid_set_t *relayed_gtid_set = get_gtid_interval(row[0], 0);
+  if (relayed_gtid_set == NULL) {
+    g_message("relayed_gtid_set is null from backend:%s", backend_addr);
+  }
 
   g_debug("relayed_gtid_set:%s from backend:%s", row[0], backend_addr);
 
@@ -587,7 +591,9 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
     g_message("retrieve gtid failed for group_replication. error: %d, "
               "text: %s, backend: %s",
               mysql_errno(conn), mysql_error(conn), backend_addr);
-    free_gtid_set(relayed_gtid_set);
+    if (relayed_gtid_set) {
+      free_gtid_set(relayed_gtid_set);
+    }
     return NULL;
   }
 
@@ -596,62 +602,73 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
     g_message("retrieve gtid result set failed for group_replication. "
               "error: %d, text: %s, backend: %s",
               mysql_errno(conn), mysql_error(conn), backend_addr);
-    free_gtid_set(relayed_gtid_set);
+    if (relayed_gtid_set) {
+      free_gtid_set(relayed_gtid_set);
+    }
     return NULL;
   }
   row = mysql_fetch_row(rs_set);
   if (row == NULL) {
-    free_gtid_set(relayed_gtid_set);
+    if (relayed_gtid_set) {
+      free_gtid_set(relayed_gtid_set);
+    }
     mysql_free_result(rs_set);
     return NULL;
   }
 
   gtid_set_t *executed_gtid_set =
       get_gtid_interval(row[1], relayed_gtid_set->num);
+  if (executed_gtid_set == NULL) {
+    g_critical("executed_gtid_set is null from backend:%s", backend_addr);
+  }
 
   g_debug("executed_gtid_set:%s from backend:%s", row[1], backend_addr);
   mysql_free_result(rs_set);
 
-  int i, j;
-  for (i = 0; i < relayed_gtid_set->num; i++) {
-    for (j = 0; j < executed_gtid_set->num; j++) {
-      if (is_subset(executed_gtid_set->gtids + j,
-                    relayed_gtid_set->gtids + i)) {
-        break;
-      }
-    }
-    /* relayed gtid is not subset of executed_gtids */
-    if (j == executed_gtid_set->num) {
+  if (relayed_gtid_set && executed_gtid_set) {
+    int i, j;
+    for (i = 0; i < relayed_gtid_set->num; i++) {
       for (j = 0; j < executed_gtid_set->num; j++) {
-        if (combine_set(executed_gtid_set->gtids + j,
-                        relayed_gtid_set->gtids + i)) {
+        if (is_subset(executed_gtid_set->gtids + j,
+                      relayed_gtid_set->gtids + i)) {
           break;
+        }
+      }
+      /* relayed gtid is not subset of executed_gtids */
+      if (j == executed_gtid_set->num) {
+        for (j = 0; j < executed_gtid_set->num; j++) {
+          if (combine_set(executed_gtid_set->gtids + j,
+                          relayed_gtid_set->gtids + i)) {
+            break;
+          }
+        }
+      }
+
+      if (j == executed_gtid_set->num) {
+        executed_gtid_set->gtids[executed_gtid_set->num].min =
+            relayed_gtid_set->gtids[j].min;
+        executed_gtid_set->gtids[executed_gtid_set->num].max =
+            relayed_gtid_set->gtids[j].max;
+        executed_gtid_set->num++;
+        if (executed_gtid_set->num >= executed_gtid_set->size) {
+          free_gtid_set(executed_gtid_set);
+          free_gtid_set(relayed_gtid_set);
+          g_critical("unexpected here, set num:%d", executed_gtid_set->num);
+          return NULL;
         }
       }
     }
 
-    if (j == executed_gtid_set->num) {
-      executed_gtid_set->gtids[executed_gtid_set->num].min =
-          relayed_gtid_set->gtids[j].min;
-      executed_gtid_set->gtids[executed_gtid_set->num].max =
-          relayed_gtid_set->gtids[j].max;
-      executed_gtid_set->num++;
-      if (executed_gtid_set->num >= executed_gtid_set->size) {
-        free_gtid_set(executed_gtid_set);
-        free_gtid_set(relayed_gtid_set);
-        g_critical("unexpected here, set num:%d", executed_gtid_set->num);
-        return NULL;
-      }
-    }
+    free_gtid_set(relayed_gtid_set);
   }
 
-  free_gtid_set(relayed_gtid_set);
-
 #ifdef USE_GLIB_DEBUG_LOG
-  for (i = 0; i < executed_gtid_set->num; i++) {
-    g_debug("gtid from backend:%s, interval:%d, min:%lld, max:%lld",
-            backend_addr, i + 1, executed_gtid_set->gtids[i].min,
-            executed_gtid_set->gtids[i].max);
+  if (executed_gtid_set) {
+    for (int i = 0; i < executed_gtid_set->num; i++) {
+      g_debug("gtid from backend:%s, interval:%d, min:%lld, max:%lld",
+              backend_addr, i + 1, executed_gtid_set->gtids[i].min,
+              executed_gtid_set->gtids[i].max);
+    }
   }
 #endif
 
