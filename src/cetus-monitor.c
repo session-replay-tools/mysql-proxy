@@ -617,7 +617,7 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
   }
 
   gtid_set_t *executed_gtid_set =
-      get_gtid_interval(row[1], relayed_gtid_set->num);
+      get_gtid_interval(row[1], relayed_gtid_set ? relayed_gtid_set->num : 0);
   if (executed_gtid_set == NULL) {
     g_critical("executed_gtid_set is null from backend:%s", backend_addr);
   }
