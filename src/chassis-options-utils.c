@@ -352,6 +352,42 @@ assign_default_username(const gchar *newval, gpointer param) {
   return ret;
 }
 
+gchar *show_group_replication_group_name(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%s", srv->group_replication_group_name != NULL
+                                     ? srv->group_replication_group_name
+                                     : "NULL");
+  }
+  if (CAN_SAVE_OPTS_PROPERTY(opt_type)) {
+    if (srv->group_replication_group_name) {
+      return g_strdup_printf("%s", srv->group_replication_group_name);
+    }
+  }
+  return NULL;
+}
+
+gint assign_group_replication_group_name(const gchar *newval, gpointer param) {
+  gint ret = ASSIGN_ERROR;
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_ASSIGN_OPTS_PROPERTY(opt_type)) {
+    if (NULL != newval) {
+      if (srv->group_replication_group_name) {
+        g_free(srv->group_replication_group_name);
+      }
+      srv->group_replication_group_name = g_strdup(newval);
+      ret = ASSIGN_OK;
+    } else {
+      ret = ASSIGN_VALUE_INVALID;
+    }
+  }
+  return ret;
+}
+
 gchar*
 show_default_db(gpointer param) {
   struct external_param *opt_param = (struct external_param *)param;

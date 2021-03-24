@@ -172,6 +172,9 @@ void chassis_free(chassis *chas) {
   if (chas->unix_socket_name) {
     g_free(chas->unix_socket_name);
   }
+  if (chas->group_replication_group_name) {
+    g_free(chas->group_replication_group_name);
+  }
   if (chas->trx_isolation_level) {
     g_free(chas->trx_isolation_level);
   }

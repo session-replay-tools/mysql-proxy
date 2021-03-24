@@ -112,6 +112,7 @@ struct chassis {
   char *default_username;
   char *default_charset;
   char *unix_socket_name;
+  char *group_replication_group_name;
 
   unsigned int maintain_close_mode : 1;
   unsigned int disable_threads : 1;

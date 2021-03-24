@@ -99,6 +99,7 @@ CHASSIS_API gchar* show_sql_log_idletime(gpointer param);
 CHASSIS_API gchar* show_sql_log_maxnum(gpointer param);
 CHASSIS_API gchar* show_check_dns(gpointer param);
 CHASSIS_API gchar* show_ssl(gpointer param);
+CHASSIS_API gchar *show_group_replication_group_name(gpointer param);
 
 /* assign utils */
 CHASSIS_API gint assign_log_level(const gchar *newval, gpointer param);
@@ -121,6 +122,8 @@ CHASSIS_API gint assign_sql_log_mode(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_sql_log_idletime(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_sql_log_maxnum(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_check_dns(const gchar *newval, gpointer param);
+CHASSIS_API gint assign_group_replication_group_name(const gchar *newval,
+                                                     gpointer param);
 
 CHASSIS_API gint chassis_options_save(GKeyFile *keyfile, chassis_options_t *opts, chassis  *chas);
 

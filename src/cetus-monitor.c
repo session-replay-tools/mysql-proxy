@@ -190,18 +190,31 @@ static void free_gtid_set(gtid_set_t *gtid_set) {
   g_free(gtid_set);
 }
 
-static gtid_set_t *get_gtid_interval(const char *gtid, int previous_num) {
+static gtid_set_t *get_gtid_interval(const char *orig_gtid,
+                                     const char *group_name, int previous_num) {
   int index = 0;
   int count = 0;
   char gtid_str[MGR_STATE_LEN];
   const char *p = NULL;
   const char *q = NULL;
-  size_t len = strlen(gtid);
+  size_t len = strlen(orig_gtid);
+  const char *gtid = orig_gtid;
+
+  if (group_name) {
+    const char *valid_gtid = strstr(gtid, group_name);
+    if (valid_gtid != NULL) {
+      gtid = valid_gtid;
+      len = strlen(valid_gtid);
+    }
+  }
 
   /* find intervals */
   while (index < len) {
     if (gtid[index] == ':') {
       count++;
+    }
+    if (gtid[index] == ',') {
+      break;
     }
     index++;
   }
@@ -229,7 +242,7 @@ static gtid_set_t *get_gtid_interval(const char *gtid, int previous_num) {
   count = 0;
   q = gtid + index;
   int64_t max = 0, min = 0;
-  while (index < len && gtid[index] != '\0') {
+  while (index < len && (gtid[index] != '\0' && gtid[index] != ',')) {
     if (gtid[index] == ':') {
       memset(gtid_str, 0, MGR_GTID_LEN);
       p = gtid + index + 1;
@@ -260,9 +273,6 @@ static gtid_set_t *get_gtid_interval(const char *gtid, int previous_num) {
         return NULL;
       }
       q = p;
-    } else if (gtid[index] == ',') {
-      free_gtid_set(gtid_set);
-      return NULL;
     }
     index++;
   }
@@ -553,7 +563,8 @@ static int group_replication_restart(network_backends_t *bs,
   return 0;
 }
 
-static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
+static gtid_set_t *group_replication_retrieve_gtid(struct chassis *srv,
+                                                   MYSQL *conn,
                                                    const char *backend_addr) {
   gchar *relay_gtid_sql = "select RECEIVED_TRANSACTION_SET from "
                           "performance_schema.replication_connection_status";
@@ -577,7 +588,8 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
     return NULL;
   }
 
-  gtid_set_t *relayed_gtid_set = get_gtid_interval(row[0], 0);
+  gtid_set_t *relayed_gtid_set =
+      get_gtid_interval(row[0], srv->group_replication_group_name, 0);
   if (relayed_gtid_set == NULL) {
     g_message("relayed_gtid_set is null from backend:%s", backend_addr);
   }
@@ -617,7 +629,8 @@ static gtid_set_t *group_replication_retrieve_gtid(MYSQL *conn,
   }
 
   gtid_set_t *executed_gtid_set =
-      get_gtid_interval(row[1], relayed_gtid_set ? relayed_gtid_set->num : 0);
+      get_gtid_interval(row[1], srv->group_replication_group_name,
+                        relayed_gtid_set ? relayed_gtid_set->num : 0);
   if (executed_gtid_set == NULL) {
     g_critical("executed_gtid_set is null from backend:%s", backend_addr);
   }
@@ -845,7 +858,7 @@ static void group_replication_detect(network_backends_t *bs,
               "backend_addr:%p",
               biggest_gtid_node_addr, backend_addr);
       gtid_set_t *gtid_set =
-          group_replication_retrieve_gtid(conn, backend_addr);
+          group_replication_retrieve_gtid(monitor->chas, conn, backend_addr);
       if (gtid_set == NULL) {
         continue;
       }

@@ -139,6 +139,7 @@ struct chassis_frontend_t {
   gchar *log_level;
   gchar *log_filename;
   char *default_username;
+  char *group_replication_group_name;
   char *default_charset;
   char *default_db;
 
@@ -228,6 +229,7 @@ void chassis_frontend_free(struct chassis_frontend_t *frontend) {
   g_free(frontend->default_username);
   g_free(frontend->default_db);
   g_free(frontend->default_charset);
+  g_free(frontend->group_replication_group_name);
 
   if (frontend->plugin_names) {
     g_strfreev(frontend->plugin_names);
@@ -508,6 +510,18 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
                       &(frontend->check_dns), "check dns when hostname changed",
                       NULL, NULL, show_check_dns,
                       SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
+  chassis_options_add(opts, "group-replication-group-name", 0, 0,
+                      OPTION_ARG_STRING,
+                      &(frontend->group_replication_group_name),
+                      "Set the group replication group name", "<string>",
+                      assign_group_replication_group_name,
+                      show_group_replication_group_name, ALL_OPTS_PROPERTY);
+  chassis_options_add(opts, "group_replication_group_name", 0, 0,
+                      OPTION_ARG_STRING,
+                      &(frontend->group_replication_group_name),
+                      "Set the group replication group name", "<string>",
+                      assign_group_replication_group_name,
+                      show_group_replication_group_name, ALL_OPTS_PROPERTY);
 
   return 0;
 }
@@ -544,6 +558,8 @@ static void init_parameters(struct chassis_frontend_t *frontend, chassis *srv) {
   srv->default_username = DUP_STRING(frontend->default_username, NULL);
   srv->default_charset = DUP_STRING(frontend->default_charset, "utf8");
   srv->default_db = DUP_STRING(frontend->default_db, NULL);
+  srv->group_replication_group_name =
+      DUP_STRING(frontend->group_replication_group_name, NULL);
 
 #if defined(SO_REUSEPORT)
   g_message("%s:SO_REUSEPORT is defined", G_STRLOC);
