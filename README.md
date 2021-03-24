@@ -35,7 +35,8 @@ make install
 4. Modify log-file to be the valid file path.
 5. Modify worker-processes to be appropriate number that best suits the workload.
 6. Modify default-pool-size appropriately.
-   
+7. Add group_replication_group_name appropriately.
+
 ### 6. How to modify user.conf
 Modify password appropriately for both your applications and MySQL.
 
