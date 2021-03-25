@@ -242,7 +242,8 @@ static gtid_set_t *get_gtid_interval(const char *orig_gtid,
   count = 0;
   q = gtid + index;
   int64_t max = 0, min = 0;
-  while (index < len && (gtid[index] != '\0' && gtid[index] != ',')) {
+  while (index < len &&
+         (gtid[index] != '\0' && (gtid[index] != ',' && gtid[index] != '|'))) {
     if (gtid[index] == ':') {
       memset(gtid_str, 0, MGR_GTID_LEN);
       p = gtid + index + 1;
