@@ -36,6 +36,7 @@ make install
 5. Modify worker-processes to be appropriate number that best suits the workload.
 6. Modify default-pool-size appropriately.
 7. Add group_replication_group_name appropriately.
+8. Add group-replication-mode=1 for single primary mode.
 
 ### 6. How to modify user.conf
 Modify password appropriately for both your applications and MySQL.
