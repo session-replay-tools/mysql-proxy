@@ -776,7 +776,6 @@ static void group_replication_detect(network_backends_t *bs,
       continue;
     }
 
-    memset(mgr_node, 0, sizeof(mgr_node_info) * MAX_SERVER_NUM);
     char *backend_addr = backend->addr->name->str;
     MYSQL *conn = get_mysql_connection(monitor, backend_addr);
     if (conn == NULL) {
@@ -800,6 +799,7 @@ static void group_replication_detect(network_backends_t *bs,
       continue;
     }
 
+    memset(mgr_node, 0, sizeof(mgr_node_info) * MAX_SERVER_NUM);
     int valid_node = 0;
     int index = 0;
     int need_retrieve_gtid = 0;
@@ -899,6 +899,8 @@ static void group_replication_detect(network_backends_t *bs,
       valid_mgr_node_num = index;
       biggest_gtid_node_addr = NULL;
       break;
+    } else {
+      valid_mgr_node_num = index;
     }
   }
 
@@ -987,17 +989,10 @@ static void group_replication_detect(network_backends_t *bs,
           } else {
             g_debug("check here for multi_write");
             if (monitor->chas->multi_write) {
-              if (backend->candidate_down) {
-                g_debug("set offline for master:%s", backend_addr);
-                network_backends_modify(bs, i, BACKEND_TYPE_RO,
-                                        BACKEND_STATE_OFFLINE,
-                                        NO_PREVIOUS_STATE);
-              } else {
-                g_debug("set up for master:%s", backend_addr);
-                network_backends_modify(bs, i, BACKEND_TYPE_RW,
-                                        BACKEND_STATE_UP, NO_PREVIOUS_STATE);
-                master_cnt++;
-              }
+              g_debug("set up for master:%s", backend_addr);
+              network_backends_modify(bs, i, BACKEND_TYPE_RW, BACKEND_STATE_UP,
+                                      NO_PREVIOUS_STATE);
+              master_cnt++;
             } else {
               master_cnt++;
             }
@@ -1099,12 +1094,33 @@ static void group_replication_detect(network_backends_t *bs,
     for (i = 0; i < backends_num; i++) {
       network_backend_t *backend = network_backends_get(bs, i);
       char *backend_addr = backend->addr->name->str;
+
+      guint j = 0;
+      int could_be_read = 0;
+      for (; j < valid_mgr_node_num; j++) {
+        if (strcasecmp(mgr_node[j].address, backend_addr) == 0) {
+          if (strcasecmp("ONLINE", mgr_node[j].state) == 0) {
+            could_be_read = 1;
+            network_backends_modify(bs, i, BACKEND_TYPE_RO, BACKEND_STATE_UP,
+                                    NO_PREVIOUS_STATE);
+            g_message("set up and readonly for node:%s", backend_addr);
+          }
+          break;
+        }
+      }
       if (backend->state != BACKEND_STATE_MAINTAINING &&
           backend->state != BACKEND_STATE_DELETED) {
-        if ((backend->connected_clients + backend->pool->cur_idle_connections) == 0) {
+        if ((backend->connected_clients +
+             backend->pool->cur_idle_connections) == 0) {
           network_backends_modify(bs, i, BACKEND_TYPE_RO, BACKEND_STATE_OFFLINE,
                                   NO_PREVIOUS_STATE);
           g_message("set offline for node:%s", backend_addr);
+        } else {
+          if (!could_be_read) {
+            network_backends_modify(bs, i, BACKEND_TYPE_RO,
+                                    BACKEND_STATE_OFFLINE, NO_PREVIOUS_STATE);
+            g_message("set offline for node when not valid:%s", backend_addr);
+          }
         }
       }
     }

@@ -80,8 +80,6 @@ typedef struct {
 
   /**< number of open connections to this backend for SQF */
   int connected_clients;
-  int last_conn_num;
-  unsigned int candidate_down : 1;
   unsigned int already_processed : 1;
 
   backend_config *config;

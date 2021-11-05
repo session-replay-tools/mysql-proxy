@@ -3401,20 +3401,6 @@ void network_connection_pool_create_conns(chassis *srv) {
       int total =
           backend->pool->cur_idle_connections + backend->connected_clients;
 
-      if (total == 0) {
-        if (backend->last_conn_num) {
-          if (!backend->candidate_down) {
-            g_warning(
-                "%s: backend:%s has no active connections, candidate dead",
-                G_STRLOC, backend->addr->name->str);
-          }
-          backend->candidate_down = 1;
-        }
-      } else {
-        backend->candidate_down = 0;
-      }
-
-      backend->last_conn_num = total;
       if (total >= allowd_conn_num) {
         continue;
       }
