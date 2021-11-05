@@ -1101,8 +1101,7 @@ static void group_replication_detect(network_backends_t *bs,
       char *backend_addr = backend->addr->name->str;
       if (backend->state != BACKEND_STATE_MAINTAINING &&
           backend->state != BACKEND_STATE_DELETED) {
-        if (backend->type == BACKEND_TYPE_RO ||
-            backend->connected_clients == 0) {
+        if ((backend->connected_clients + backend->pool->cur_idle_connections) == 0) {
           network_backends_modify(bs, i, BACKEND_TYPE_RO, BACKEND_STATE_OFFLINE,
                                   NO_PREVIOUS_STATE);
           g_message("set offline for node:%s", backend_addr);
