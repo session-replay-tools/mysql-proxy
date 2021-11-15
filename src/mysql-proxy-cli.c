@@ -108,6 +108,7 @@ struct chassis_frontend_t {
   int is_back_compressed;
   int is_client_compress_support;
   int is_reduce_conns;
+  int is_backend_multi_write;
   int long_query_time;
   int cetus_max_allowed_packet;
   int client_idle_timeout;
@@ -187,6 +188,7 @@ struct chassis_frontend_t *chassis_frontend_new(void) {
   frontend->cetus_max_allowed_packet = MAX_ALLOWED_PACKET_DEFAULT;
   frontend->disable_dns_cache = 0;
 
+  frontend->is_backend_multi_write = 0;
   frontend->is_tcp_stream_enabled = 1;
   frontend->is_fast_stream_enabled = 0;
   frontend->check_sql_loosely = 0;
@@ -420,6 +422,12 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
                       NULL, NULL, show_reduce_connections,
                       SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
 
+  chassis_options_add(opts, "backend-multi-write", 0, 0, OPTION_ARG_NONE,
+                      &(frontend->is_backend_multi_write),
+                      "Reduce connections when idle connection num is too high",
+                      NULL, NULL, show_backend_multi_write,
+                      SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
+
   chassis_options_add(opts, "enable-tcp-stream", 0, 0, OPTION_ARG_NONE,
                       &(frontend->is_tcp_stream_enabled), "", NULL, NULL,
                       show_enable_tcp_stream,
@@ -609,6 +617,10 @@ static void init_parameters(struct chassis_frontend_t *frontend, chassis *srv) {
   g_message("set client_found_rows %s",
             srv->client_found_rows ? "true" : "false");
 
+  srv->is_backend_multi_write = frontend->is_backend_multi_write;
+  if (srv->is_backend_multi_write) {
+    g_message("%s:backend multi-write is set to true", G_STRLOC);
+  }
   srv->is_tcp_stream_enabled = frontend->is_tcp_stream_enabled;
   if (srv->is_tcp_stream_enabled) {
     g_message("%s:tcp stream enabled", G_STRLOC);

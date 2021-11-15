@@ -3394,6 +3394,8 @@ void network_connection_pool_create_conns(chassis *srv) {
     if (backend != NULL) {
       if (backend->state != BACKEND_STATE_UP &&
           backend->state != BACKEND_STATE_UNKNOWN) {
+        g_message("%s: omit create conns, backend state:%d", G_STRLOC,
+                  backend->state);
         continue;
       }
       int allowd_conn_num = backend->config->mid_conn_pool;
@@ -3558,7 +3560,6 @@ void check_and_create_conns_func(int fd, short what, void *arg) {
     }
   }
 
-  g_debug("%s: check_and_create_conns_func", G_STRLOC);
   struct timeval check_interval = {2, 0};
   chassis_event_add_with_timeout(chas, &chas->auto_create_conns_event,
                                  &check_interval);

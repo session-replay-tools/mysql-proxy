@@ -962,6 +962,19 @@ show_enable_sql_special_processed(gpointer param) {
   return NULL;
 }
 
+gchar *show_backend_multi_write(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%s",
+                           srv->is_backend_multi_write ? "true" : "false");
+  }
+  if (CAN_SAVE_OPTS_PROPERTY(opt_type)) {
+    return srv->is_backend_multi_write ? g_strdup("true") : g_strdup("false");
+  }
+  return NULL;
+}
 
 gchar*
 show_enable_tcp_stream(gpointer param) {

@@ -736,7 +736,7 @@ static int is_could_start_mgr_now(cetus_monitor_t *monitor, int agggressive) {
   }
   int x = g_random_int_range(0, max_num);
   if (x == 0) {
-    g_message("g_random_int_range num:%d, max_num:%d", x, max_num);
+    g_message("g_random_int_range  x=0, max_num:%d", max_num);
     return 1;
   } else {
     return 0;
@@ -766,9 +766,26 @@ static void group_replication_detect(network_backends_t *bs,
 
   gtid_set_t *max_gtid_set = NULL;
   const char *biggest_gtid_node_addr = NULL;
+  const char *smallest_backend_addr = NULL;
   memset(offline, 0, MAX_SERVER_NUM);
 
   backends_num = network_backends_count(bs);
+  /* find the smallest backend addr */
+  if (monitor->chas->is_backend_multi_write) {
+    for (i = 0; i < backends_num; i++) {
+      network_backend_t *backend = network_backends_get(bs, i);
+      char *backend_addr = backend->addr->name->str;
+      if (smallest_backend_addr == NULL) {
+        smallest_backend_addr = backend_addr;
+      } else {
+        int cmp_result = strcmp(smallest_backend_addr, backend_addr);
+        if (cmp_result > 0) {
+          smallest_backend_addr = backend_addr;
+        }
+      }
+    }
+  }
+
   for (i = 0; i < backends_num; i++) {
     network_backend_t *backend = network_backends_get(bs, i);
     if (backend->state == BACKEND_STATE_MAINTAINING ||
@@ -880,8 +897,12 @@ static void group_replication_detect(network_backends_t *bs,
           max_gtid_set = gtid_set;
           biggest_gtid_node_addr = backend_addr;
         } else if (compared_value == GTID_EQUAL) {
-          if (backend->type == BACKEND_TYPE_RW) {
-            biggest_gtid_node_addr = backend_addr;
+          if (monitor->chas->is_backend_multi_write == 0) {
+            if (backend->type == BACKEND_TYPE_RW) {
+              biggest_gtid_node_addr = backend_addr;
+            }
+          } else {
+            biggest_gtid_node_addr = smallest_backend_addr;
           }
           free_gtid_set(gtid_set);
         } else if (compared_value == GTID_LESSER) {
@@ -1118,17 +1139,10 @@ static void group_replication_detect(network_backends_t *bs,
       }
       if (backend->state != BACKEND_STATE_MAINTAINING &&
           backend->state != BACKEND_STATE_DELETED) {
-        if ((backend->connected_clients +
-             backend->pool->cur_idle_connections) == 0) {
+        if (!could_be_read) {
           network_backends_modify(bs, i, BACKEND_TYPE_RO, BACKEND_STATE_OFFLINE,
                                   NO_PREVIOUS_STATE);
-          g_message("set offline for node:%s", backend_addr);
-        } else {
-          if (!could_be_read) {
-            network_backends_modify(bs, i, BACKEND_TYPE_RO,
-                                    BACKEND_STATE_OFFLINE, NO_PREVIOUS_STATE);
-            g_message("set offline for node when not valid:%s", backend_addr);
-          }
+          g_message("set offline for node when not valid:%s", backend_addr);
         }
       }
     }

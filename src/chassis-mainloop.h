@@ -134,6 +134,7 @@ struct chassis {
   unsigned int candidate_config_changed : 1;
   unsigned int config_changed : 1;
   unsigned int multi_write : 1;
+  unsigned int is_backend_multi_write : 1;
 
   unsigned int long_query_time;
   unsigned int internal_trx_isolation_level;
