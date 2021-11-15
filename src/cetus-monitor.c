@@ -409,7 +409,7 @@ static int group_replication_restart(network_backends_t *bs,
       "SET GLOBAL group_replication_bootstrap_group=OFF";
   gchar *start_mgr_sql = "start group_replication";
 
-  g_debug("Adopt bakend:%s as the primary node", biggest_gtid_node_addr);
+  g_message("Adopt bakend:%s as the primary node", biggest_gtid_node_addr);
 
   guint backends_num = network_backends_count(bs);
   guint i = 0;
@@ -736,7 +736,7 @@ static int is_could_start_mgr_now(cetus_monitor_t *monitor, int agggressive) {
   }
   int x = g_random_int_range(0, max_num);
   if (x == 0) {
-    g_message("g_random_int_range num:%d", x);
+    g_message("g_random_int_range num:%d, max_num:%d", x, max_num);
     return 1;
   } else {
     return 0;
@@ -757,7 +757,7 @@ static void group_replication_detect(network_backends_t *bs,
   int has_valid_mgr_partition = 0;
   int valid_mgr_node_num = 0;
   int write_num = 0;
-
+  int has_online_node = 0;
 
   g_debug("group_replication_detect is called");
   gchar *sql = "SELECT `MEMBER_STATE`, `MEMBER_HOST`, `MEMBER_PORT`, "
@@ -803,7 +803,7 @@ static void group_replication_detect(network_backends_t *bs,
     int valid_node = 0;
     int index = 0;
     int need_retrieve_gtid = 0;
-    /* Check all node info is valid */
+    /* Check if each node's info is valid */
     do {
       MYSQL_ROW row = mysql_fetch_row(rs_set);
       if (row == NULL) {
@@ -836,6 +836,7 @@ static void group_replication_detect(network_backends_t *bs,
           mgr_node[index].is_recovering = 1;
         }
         valid_node++;
+        has_online_node = 1;
         if (strcasecmp("ARBITRATOR", mgr_node[index].member_role) != 0) {
           mgr_node[index].valid = 1;
           if (strcasecmp("PRIMARY", mgr_node[index].member_role) == 0) {
@@ -900,7 +901,9 @@ static void group_replication_detect(network_backends_t *bs,
       biggest_gtid_node_addr = NULL;
       break;
     } else {
-      valid_mgr_node_num = index;
+      if (index > valid_mgr_node_num) {
+        valid_mgr_node_num = index;
+      }
     }
   }
 
@@ -916,18 +919,21 @@ static void group_replication_detect(network_backends_t *bs,
   }
 
   g_debug("group_replication check biggest_gtid_node_addr");
-  if (biggest_gtid_node_addr) {
-    g_debug(
-        "group_replication_restart now for all, biggest gtid addr:%s for bs:%p",
-        biggest_gtid_node_addr, bs);
-    if (is_could_start_mgr_now(monitor, 1)) {
-      if (group_replication_restart(bs, monitor, biggest_gtid_node_addr) ==
-          -1) {
-        g_debug("group_replication_restart failed, return");
-        return;
+  if (has_online_node == 0) {
+    if (biggest_gtid_node_addr) {
+      g_debug(
+          "group_replication_restart now for all, biggest gtid addr:%s for "
+          "bs:%p",
+          biggest_gtid_node_addr, bs);
+      if (is_could_start_mgr_now(monitor, 1)) {
+        if (group_replication_restart(bs, monitor, biggest_gtid_node_addr) ==
+            -1) {
+          g_debug("group_replication_restart failed, return");
+          return;
+        }
       }
+      g_debug("after group_replication_restart for bs:%p", bs);
     }
-    g_debug("after group_replication_restart for bs:%p", bs);
   }
 
   if (has_valid_mgr_partition) {
@@ -1090,7 +1096,9 @@ static void group_replication_detect(network_backends_t *bs,
       }
     }
   } else {
-    g_critical("group_replication_detect set all nodes offline");
+    g_critical(
+        "group_replication_detect set all nodes offline, valid_mgr_node_num:%d",
+        valid_mgr_node_num);
     for (i = 0; i < backends_num; i++) {
       network_backend_t *backend = network_backends_get(bs, i);
       char *backend_addr = backend->addr->name->str;
