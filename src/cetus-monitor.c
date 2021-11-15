@@ -816,7 +816,6 @@ static void group_replication_detect(network_backends_t *bs,
       continue;
     }
 
-    memset(mgr_node, 0, sizeof(mgr_node_info) * MAX_SERVER_NUM);
     int valid_node = 0;
     int index = 0;
     int need_retrieve_gtid = 0;
@@ -833,6 +832,10 @@ static void group_replication_detect(network_backends_t *bs,
         /* Retrieve most updated gtid for selecting master */
         need_retrieve_gtid = 1;
         break;
+      }
+
+      if (index == 0) {
+        memset(mgr_node, 0, sizeof(mgr_node_info) * MAX_SERVER_NUM);
       }
 
       snprintf(mgr_node[index].state, MGR_STATE_LEN, "%s", row[0]);
