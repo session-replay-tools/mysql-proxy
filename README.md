@@ -37,6 +37,7 @@ make install
 6. Modify default-pool-size appropriately.
 7. Add group_replication_group_name appropriately.
 8. Add group-replication-mode=1 for single primary mode.
+9. Add backend-multi-write=true for multiple primary mode.
 
 ### 6. How to modify user.conf
 Modify password appropriately for both your applications and MySQL.
