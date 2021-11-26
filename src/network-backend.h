@@ -136,7 +136,7 @@ int network_backends_find_address(network_backends_t *bs, const char *);
 
 void network_backends_server_version(network_backends_t *b, GString* version);
 
-int network_backends_get_ro_ndx(network_backends_t *);
+int network_backends_get_ro_ndx(network_backends_t *, int, gtid_set_t *);
 
 int network_backends_get_rw_ndx(network_backends_t *);
 

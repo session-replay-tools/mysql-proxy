@@ -1188,8 +1188,10 @@ static int handle_read_query(network_mysqld_con *con,
     return DISP_STOP;
   case NETWORK_SOCKET_SUCCESS:
     if (con->retry_serv_cnt > 0 && con->is_wait_server) {
-      g_message("%s: wait successful:%d, con:%p", G_STRLOC, con->retry_serv_cnt,
-                con);
+      if (con->retry_serv_cnt >= 3) {
+        g_message("%s: wait successful:%d, con:%p", G_STRLOC,
+                  con->retry_serv_cnt, con);
+      }
       handle_query_wait_stats(con);
     }
     con->is_wait_server = 0;
@@ -1926,9 +1928,14 @@ network_socket_retval_t network_mysqld_read_rw_resp(network_mysqld_con *con,
             if (con->last_tracked_gtid) {
               g_debug("%s:old gtid:%s", G_STRLOC, con->last_tracked_gtid);
               g_free(con->last_tracked_gtid);
+              free_gtid_set(con->session_tracked_gtids);
             }
             con->last_tracked_gtid = query->gtid;
-            g_debug("%s:new gtid:%s", G_STRLOC, con->last_tracked_gtid);
+            g_debug("%s:new gtid:%s for con:%p ", G_STRLOC,
+                    con->last_tracked_gtid, con);
+            con->session_tracked_gtids =
+                get_gtid_interval(con->last_tracked_gtid,
+                                  con->srv->group_replication_group_name, 0);
             query->gtid = NULL;
           }
         }

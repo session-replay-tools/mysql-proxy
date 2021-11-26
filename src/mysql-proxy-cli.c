@@ -99,6 +99,7 @@ struct chassis_frontend_t {
   int worker_processes;
   int max_alive_time;
   int master_preferred;
+  int session_causal_read;
   int config_port;
   int disable_threads;
   int is_tcp_stream_enabled;
@@ -453,11 +454,14 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
       &(frontend->disable_dns_cache),
       "Every new connection to backends will resolve domain name", NULL, NULL,
       show_disable_dns_cache, SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
-
   chassis_options_add(
       opts, "master-preferred", 0, 0, OPTION_ARG_NONE,
       &(frontend->master_preferred), "Access to master preferentially", NULL,
       NULL, show_master_preferred, SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
+  chassis_options_add(
+      opts, "session-causal-read", 0, 0, OPTION_ARG_NONE,
+      &(frontend->session_causal_read), "Support session causal read", NULL,
+      NULL, show_session_causal_read, SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
   chassis_options_add(opts, "max-allowed-packet", 0, 0, OPTION_ARG_INT,
                       &(frontend->cetus_max_allowed_packet),
                       "Max allowed packet as in mysql", "<int>",
@@ -519,12 +523,6 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
                       NULL, NULL, show_check_dns,
                       SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
   chassis_options_add(opts, "group-replication-group-name", 0, 0,
-                      OPTION_ARG_STRING,
-                      &(frontend->group_replication_group_name),
-                      "Set the group replication group name", "<string>",
-                      assign_group_replication_group_name,
-                      show_group_replication_group_name, ALL_OPTS_PROPERTY);
-  chassis_options_add(opts, "group_replication_group_name", 0, 0,
                       OPTION_ARG_STRING,
                       &(frontend->group_replication_group_name),
                       "Set the group replication group name", "<string>",
@@ -639,6 +637,7 @@ static void init_parameters(struct chassis_frontend_t *frontend, chassis *srv) {
   srv->is_back_compressed = frontend->is_back_compressed;
   srv->compress_support = frontend->is_client_compress_support;
   srv->master_preferred = frontend->master_preferred;
+  srv->session_causal_read = frontend->session_causal_read;
   srv->disable_dns_cache = frontend->disable_dns_cache;
   srv->client_idle_timeout = MAX(frontend->client_idle_timeout, 10);
   srv->incomplete_tran_idle_timeout =

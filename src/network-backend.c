@@ -355,8 +355,9 @@ gboolean network_backends_load_config(network_backends_t *bs, chassis *srv) {
 }
 
 /* round robin choose read only backend */
-int network_backends_get_ro_ndx(network_backends_t *bs)
-{
+int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
+                                gtid_set_t *client_tracked_gtid) {
+  g_debug("%s:call network_backends_get_ro_ndx", G_STRLOC);
   GArray *active_ro_indices = g_array_sized_new(FALSE, TRUE, sizeof(int), 4);
   int count = network_backends_count(bs);
   int i = 0;
@@ -365,6 +366,31 @@ int network_backends_get_ro_ndx(network_backends_t *bs)
     if ((backend->type == BACKEND_TYPE_RO) &&
         (backend->state == BACKEND_STATE_UP ||
          backend->state == BACKEND_STATE_UNKNOWN)) {
+      if (session_causal_read) {
+        if (!client_tracked_gtid) {
+          break;
+        }
+        gtid_set_t *srv_gtids = NULL;
+        if (backend->use_gtid_index) {
+          srv_gtids = backend->last_update_gtid2;
+        } else {
+          srv_gtids = backend->last_update_gtid1;
+        }
+        if (!srv_gtids) {
+          break;
+        }
+        srv_gtids->in_use = 1;
+        int result = compare_gtid_set(srv_gtids, client_tracked_gtid);
+        if (result == GTID_LESSER || result == GTID_UNKNOWN) {
+          g_debug("gtid is not compatitable with backend:%s, result:%d",
+                  backend->addr->name->str, result);
+          srv_gtids->in_use = 0;
+          continue;
+        }
+        srv_gtids->in_use = 0;
+        g_debug("gtid is compatitable with backend:%s",
+                backend->addr->name->str);
+      }
       g_array_append_val(active_ro_indices, i);
     }
   }
@@ -583,8 +609,8 @@ gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
 #ifdef USE_GLIB_DEBUG_LOG
     int i;
     for (i = 0; i <= count; i++) {
-      g_debug("gtid interval, max:%lld, min:%lld", gtid_set->gtids[i].max,
-              gtid_set->gtids[i].min);
+      g_debug("gtid interval, max:%lld, min:%lld, count:%d",
+              gtid_set->gtids[i].max, gtid_set->gtids[i].min, count);
     }
 #endif
 

@@ -709,7 +709,9 @@ static int process_non_trans_query(network_mysqld_con *con,
     }
 
     if (con->last_record_updated) {
-      need_to_visit_master = TRUE;
+      if (!con->srv->session_causal_read) {
+        need_to_visit_master = TRUE;
+      }
     }
 
     break;
@@ -1891,13 +1893,17 @@ static gboolean proxy_get_backend_ndx(network_mysqld_con *con, int type,
   int idx;
   if (type == BACKEND_TYPE_RO) {
     if (force_slave) {
-      idx = network_backends_get_ro_ndx(g->backends);
+      idx = network_backends_get_ro_ndx(g->backends,
+                                        con->srv->session_causal_read,
+                                        con->session_tracked_gtids);
     } else {
       int x = g_random_int_range(0, 100);
       if (x < con->config->read_master_percentage) {
         idx = network_backends_get_rw_ndx(g->backends);
       } else {
-        idx = network_backends_get_ro_ndx(g->backends);
+        idx = network_backends_get_ro_ndx(g->backends,
+                                          con->srv->session_causal_read,
+                                          con->session_tracked_gtids);
       }
       g_debug(G_STRLOC ": %d, read_master_percentage: %d, read: %d", x,
               con->config->read_master_percentage, idx);

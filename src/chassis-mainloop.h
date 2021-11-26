@@ -125,6 +125,7 @@ struct chassis {
   unsigned int compress_support : 1;
   unsigned int client_found_rows : 1;
   unsigned int master_preferred : 1;
+  unsigned int session_causal_read : 1;
   unsigned int is_reduce_conns : 1;
   unsigned int charset_check : 1;
   unsigned int complement_conn_flag : 1;

@@ -337,36 +337,39 @@ static int group_replication_restart(network_backends_t *bs,
 
 static void copy_executed_gtid_to_backend(network_backend_t *backend,
                                           gtid_set_t *executed_gtid_set) {
-    gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
-    gtid_set->num = executed_gtid_set->num;
-    gtid_set->size = gtid_set->num;
-    gtid_set->in_use = 0;
-    gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
+  gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
+  gtid_set->num = executed_gtid_set->num;
+  gtid_set->size = gtid_set->num;
+  gtid_set->in_use = 0;
+  gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
 
-    int i = 0;
-    for (; i < executed_gtid_set->num; i++) {
-      gtid_set->gtids[i] = executed_gtid_set->gtids[i];
-    }
+  int i = 0;
+  for (; i < executed_gtid_set->num; i++) {
+    gtid_set->gtids[i] = executed_gtid_set->gtids[i];
+  }
 
-    gtid_set_t *old = NULL;
-    /* backend now uses last_update_gtid2 */
-    if (backend->use_gtid_index) {
-      /* Update last_update_gtid1 */
-      old = backend->last_update_gtid1;
-      backend->last_update_gtid1 = gtid_set;
-      backend->use_gtid_index = 0;
-    } else {
-      /* backend now uses last_update_gtid1 */
-      old = backend->last_update_gtid2;
-      backend->last_update_gtid2 = gtid_set;
-      backend->use_gtid_index = 1;
-    }
+  gtid_set_t *old = NULL;
+  /* backend now uses last_update_gtid2 */
+  if (backend->use_gtid_index) {
+    /* Update last_update_gtid1 */
+    old = backend->last_update_gtid1;
+    backend->last_update_gtid1 = gtid_set;
+    backend->use_gtid_index = 0;
+  } else {
+    /* backend now uses last_update_gtid1 */
+    old = backend->last_update_gtid2;
+    backend->last_update_gtid2 = gtid_set;
+    backend->use_gtid_index = 1;
+  }
 
+  g_debug("update backend:%s, use_gtid_index:%d", backend->addr->name->str,
+          backend->use_gtid_index);
+  if (old) {
     while (old->in_use) {
       /*no op */
     }
-
     free_gtid_set(old);
+  }
 }
 
 static gtid_set_t *
@@ -573,6 +576,7 @@ static void group_replication_detect(network_backends_t *bs,
   int write_num = 0;
   int has_online_node = 0;
   int need_to_retrieve_receive_gtid_set = 0;
+  int continue_to_retrieve_slave_gtids = 0;
 
   g_debug("group_replication_detect is called");
   gchar *sql = "SELECT `MEMBER_STATE`, `MEMBER_HOST`, `MEMBER_PORT`, "
@@ -596,6 +600,15 @@ static void group_replication_detect(network_backends_t *bs,
     if (conn == NULL) {
       g_debug("get connection failed. error: %d, text: %s, backend: %s",
               mysql_errno(conn), mysql_error(conn), backend_addr);
+      continue;
+    }
+
+    if (continue_to_retrieve_slave_gtids) {
+      gtid_set_t *gtid_set =
+          group_replication_retrieve_gtid(monitor->chas, conn, backend, 0);
+      if (gtid_set == NULL) {
+        g_message("gtid set is nill for backend:%s", backend_addr);
+      }
       continue;
     }
 
@@ -673,7 +686,7 @@ static void group_replication_detect(network_backends_t *bs,
     mysql_free_result(rs_set);
 
     g_debug("before group_replication_retrieve_gtid,biggest gtid addr:%p,"
-            "backend_addr:%p",
+            "backend_addr:%s",
             biggest_gtid_node_addr, backend_addr);
     gtid_set_t *gtid_set = group_replication_retrieve_gtid(
         monitor->chas, conn, backend, need_to_retrieve_receive_gtid_set);
@@ -719,7 +732,12 @@ static void group_replication_detect(network_backends_t *bs,
       has_valid_mgr_partition = 1;
       valid_mgr_node_num = index;
       biggest_gtid_node_addr = NULL;
-      break;
+
+      if (!monitor->chas->session_causal_read) {
+        break;
+      } else {
+        continue_to_retrieve_slave_gtids = 1;
+      }
     } else {
       if (index > valid_mgr_node_num) {
         valid_mgr_node_num = index;

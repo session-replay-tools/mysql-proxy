@@ -1018,6 +1018,19 @@ show_master_preferred(gpointer param) {
   return NULL;
 }
 
+gchar *show_session_causal_read(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%s", srv->session_causal_read ? "true" : "false");
+  }
+  if (CAN_SAVE_OPTS_PROPERTY(opt_type)) {
+    return srv->session_causal_read ? g_strdup("true") : NULL;
+  }
+  return NULL;
+}
+
 gchar*
 show_max_allowed_packet(gpointer param) {
   struct external_param *opt_param = (struct external_param *)param;

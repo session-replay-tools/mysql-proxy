@@ -416,6 +416,7 @@ struct network_mysqld_con {
    */
   network_socket *client;
   gchar *last_tracked_gtid;
+  gtid_set_t *session_tracked_gtids;
 
   /**
    * Function pointers to the plugin's callbacks.
