@@ -448,3 +448,213 @@ int network_backend_check_available_rw(network_backends_t *bs) {
   }
   return i < count ? 1 : 0;
 }
+
+/* gtid related functions */
+void free_gtid_set(gtid_set_t *gtid_set) {
+  g_free(gtid_set->gtids);
+  g_free(gtid_set);
+}
+
+int is_equal_set(gtid_interval *set, gtid_interval *candidate_subset) {
+  if (candidate_subset->min == set->min && candidate_subset->max == set->max) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+int is_subset(gtid_interval *set, gtid_interval *candidate_subset) {
+  if (candidate_subset->min >= set->min && candidate_subset->max <= set->max) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+int combine_set(gtid_interval *set, gtid_interval *combined_set) {
+  if (set->max >= combined_set->min && set->min <= combined_set->min) {
+    set->max = combined_set->max;
+    return 1;
+  } else if (combined_set->max >= set->min && combined_set->max <= set->max) {
+    set->min = combined_set->min;
+    return 1;
+  }
+  return 0;
+}
+
+gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
+                              int previous_num) {
+  int index = 0;
+  int count = 0;
+  char gtid_str[MGR_STATE_LEN];
+  const char *p = NULL;
+  const char *q = NULL;
+  size_t len = strlen(orig_gtid);
+  const char *gtid = orig_gtid;
+
+  if (group_name) {
+    const char *valid_gtid = strstr(gtid, group_name);
+    if (valid_gtid != NULL) {
+      gtid = valid_gtid;
+      len = strlen(valid_gtid);
+    }
+  }
+
+  /* find intervals */
+  while (index < len) {
+    if (gtid[index] == ':') {
+      count++;
+    }
+    if (gtid[index] == ',') {
+      break;
+    }
+    index++;
+  }
+
+  index = 0;
+  /* skip source_id */
+  while (gtid[index] != ':') {
+    index++;
+    if (index == len) {
+      g_message("gtid is strange, gtid:%s", gtid);
+      return NULL;
+    }
+  }
+
+  int max_set_num = previous_num + count;
+  gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
+  gtid_set->num = count;
+  gtid_set->size = max_set_num;
+
+  gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
+  index++;
+
+  g_debug("get_gtid_interval, gtid:%s, num:%d, size:%d", gtid, count,
+          max_set_num);
+  count = 0;
+  q = gtid + index;
+  int64_t max = 0, min = 0;
+  while (index < len &&
+         (gtid[index] != '\0' && (gtid[index] != ',' && gtid[index] != '|'))) {
+    if (gtid[index] == ':') {
+      memset(gtid_str, 0, MGR_GTID_LEN);
+      p = gtid + index + 1;
+      if (p > (q + 1)) {
+        strncpy(gtid_str, q, p - q - 1);
+        max = (int64_t)atoll(gtid_str);
+        if (min == 0) {
+          min = max;
+        }
+        gtid_set->gtids[count].max = max;
+        gtid_set->gtids[count].min = min;
+        count++;
+        g_debug("add gtid interval, max:%lld, min:%lld", max, min);
+        min = 0;
+      } else {
+        free_gtid_set(gtid_set);
+        return NULL;
+      }
+      q = p;
+    } else if (gtid[index] == '-') {
+      memset(gtid_str, 0, MGR_GTID_LEN);
+      p = gtid + index + 1;
+      if (p > (q + 1)) {
+        strncpy(gtid_str, q, p - q - 1);
+        min = (int64_t)atoll(gtid_str);
+      } else {
+        free_gtid_set(gtid_set);
+        return NULL;
+      }
+      q = p;
+    }
+    index++;
+  }
+
+  /* last value */
+  max = (int64_t)atoll(q);
+  if (min == 0) {
+    min = max;
+  }
+  if (count < gtid_set->size) {
+    gtid_set->gtids[count].max = max;
+    gtid_set->gtids[count].min = min;
+    g_debug("add gtid interval, max:%lld, min:%lld", max, min);
+
+#ifdef USE_GLIB_DEBUG_LOG
+    int i;
+    for (i = 0; i <= count; i++) {
+      g_debug("gtid interval, max:%lld, min:%lld", gtid_set->gtids[i].max,
+              gtid_set->gtids[i].min);
+    }
+#endif
+
+    return gtid_set;
+  } else {
+    g_message("unexpected count:%d, gtid size:%d, gtid:%s", count,
+              gtid_set->size, gtid);
+    free_gtid_set(gtid_set);
+    return NULL;
+  }
+}
+
+/**
+ * if set1 is subset set2, then return GTID_LESSER.
+ * if set1 is not subset set2 and if set2 is subset of set1 then return
+ * GTID_GREATER.
+ * if set1 is equals to set2, then return GTID_EQUAL
+ */
+int compare_gtid_set(gtid_set_t *set1, gtid_set_t *set2) {
+  int i, j;
+  int count = 0;
+  if (set1->num == set2->num) {
+    for (i = 0; i < set1->num; i++) {
+      for (j = 0; j < set2->num; j++) {
+        if (is_equal_set(set1->gtids + i, set2->gtids + j)) {
+          count++;
+          break;
+        }
+      }
+      if (j == set2->num) {
+        break;
+      }
+    }
+    if (count == set1->num) {
+      return GTID_EQUAL;
+    }
+  }
+
+  for (i = 0; i < set1->num; i++) {
+    for (j = 0; j < set2->num; j++) {
+      if (is_subset(set1->gtids + i, set2->gtids + j)) {
+        count++;
+        break;
+      }
+    }
+    if (j == set2->num) {
+      break;
+    }
+  }
+
+  if (count == set2->num) {
+    return GTID_GREATER;
+  }
+
+  count = 0;
+  for (i = 0; i < set2->num; i++) {
+    for (j = 0; j < set1->num; j++) {
+      if (is_subset(set2->gtids + i, set1->gtids + j)) {
+        count++;
+        break;
+      }
+    }
+    if (j == set1->num) {
+      break;
+    }
+  }
+
+  if (count == set1->num) {
+    return GTID_LESSER;
+  }
+
+  return GTID_UNKNOWN;
+}

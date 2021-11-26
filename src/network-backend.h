@@ -67,6 +67,18 @@ typedef struct backend_config {
 
 } backend_config;
 
+typedef struct gtid_interval {
+  int64_t min;
+  int64_t max;
+} gtid_interval;
+
+typedef struct gtid_set_t {
+  unsigned int size;
+  unsigned int num : 30;
+  unsigned int in_use : 1;
+  gtid_interval *gtids;
+} gtid_set_t;
+
 typedef struct {
   network_address *addr;
   GString *address; /* original address, might be domain name or ip */
@@ -81,11 +93,14 @@ typedef struct {
   /**< number of open connections to this backend for SQF */
   int connected_clients;
   unsigned int already_processed : 1;
+  unsigned int use_gtid_index : 1;
 
   backend_config *config;
 
   time_t last_check_time;
   GString *server_version;
+  gtid_set_t *last_update_gtid1;
+  gtid_set_t *last_update_gtid2;
 } network_backend_t;
 
 NETWORK_API network_backend_t *network_backend_new();
@@ -129,5 +144,22 @@ int network_backends_idle_conns(network_backends_t *);
 int network_backends_used_conns(network_backends_t *);
 
 int network_backend_check_available_rw(network_backends_t *);
+
+#define MGR_STATE_LEN 64
+#define MGR_ROLE_LEN 64
+#define MGR_GTID_LEN 32
+
+#define GTID_GREATER 1
+#define GTID_EQUAL 0
+#define GTID_LESSER -1
+#define GTID_UNKNOWN -2
+
+void free_gtid_set(gtid_set_t *gtid_set);
+int is_equal_set(gtid_interval *set, gtid_interval *candidate_subset);
+int is_subset(gtid_interval *set, gtid_interval *candidate_subset);
+int combine_set(gtid_interval *set, gtid_interval *combined_set);
+int compare_gtid_set(gtid_set_t *set1, gtid_set_t *set2);
+gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
+                              int previous_num);
 
 #endif /* _BACKEND_H_ */

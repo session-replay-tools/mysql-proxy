@@ -44,9 +44,6 @@
 #include <arpa/inet.h>
 
 #define ADDRESS_LEN 64
-#define MGR_STATE_LEN 64
-#define MGR_ROLE_LEN 64
-#define MGR_GTID_LEN 32
 
 struct cetus_monitor_t {
   struct chassis *chas;
@@ -63,45 +60,6 @@ struct cetus_monitor_t {
 
   unsigned int mysql_init_called : 1;
 };
-
-typedef struct gtid_interval {
-  int64_t min;
-  int64_t max;
-} gtid_interval;
-
-typedef struct gtid_set_t {
-  int size;
-  int num;
-  gtid_interval *gtids;
-} gtid_set_t;
-
-
-static int is_equal_set(gtid_interval *set, gtid_interval *candidate_subset) {
-  if (candidate_subset->min == set->min && candidate_subset->max == set->max) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
-
-static int is_subset(gtid_interval *set, gtid_interval *candidate_subset) {
-  if (candidate_subset->min >= set->min && candidate_subset->max <= set->max) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
-
-static int combine_set(gtid_interval *set, gtid_interval *combined_set) {
-  if (set->max >= combined_set->min && set->min <= combined_set->min) {
-    set->max = combined_set->max;
-    return 1;
-  } else if (combined_set->max >= set->min && combined_set->max <= set->max) {
-    set->min = combined_set->min;
-    return 1;
-  }
-  return 0;
-}
 
 static void mysql_conn_free(gpointer e) {
   MYSQL *conn = e;
@@ -179,193 +137,6 @@ typedef struct mgr_node_info {
   unsigned int master : 1;
   unsigned int is_recovering : 1;
 } mgr_node_info;
-
-#define GTID_GREATER 1
-#define GTID_EQUAL 0
-#define GTID_LESSER -1
-#define GTID_UNKNOWN -2
-
-static void free_gtid_set(gtid_set_t *gtid_set) {
-  g_free(gtid_set->gtids);
-  g_free(gtid_set);
-}
-
-static gtid_set_t *get_gtid_interval(const char *orig_gtid,
-                                     const char *group_name, int previous_num) {
-  int index = 0;
-  int count = 0;
-  char gtid_str[MGR_STATE_LEN];
-  const char *p = NULL;
-  const char *q = NULL;
-  size_t len = strlen(orig_gtid);
-  const char *gtid = orig_gtid;
-
-  if (group_name) {
-    const char *valid_gtid = strstr(gtid, group_name);
-    if (valid_gtid != NULL) {
-      gtid = valid_gtid;
-      len = strlen(valid_gtid);
-    }
-  }
-
-  /* find intervals */
-  while (index < len) {
-    if (gtid[index] == ':') {
-      count++;
-    }
-    if (gtid[index] == ',') {
-      break;
-    }
-    index++;
-  }
-
-  index = 0;
-  /* skip source_id */
-  while (gtid[index] != ':') {
-    index++;
-    if (index == len) {
-      g_message("gtid is strange, gtid:%s", gtid);
-      return NULL;
-    }
-  }
-
-  int max_set_num = previous_num + count;
-  gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
-  gtid_set->num = count;
-  gtid_set->size = max_set_num;
-
-  gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
-  index++;
-
-  g_debug("get_gtid_interval, gtid:%s, num:%d, size:%d", gtid, count,
-          max_set_num);
-  count = 0;
-  q = gtid + index;
-  int64_t max = 0, min = 0;
-  while (index < len &&
-         (gtid[index] != '\0' && (gtid[index] != ',' && gtid[index] != '|'))) {
-    if (gtid[index] == ':') {
-      memset(gtid_str, 0, MGR_GTID_LEN);
-      p = gtid + index + 1;
-      if (p > (q + 1)) {
-        strncpy(gtid_str, q, p - q - 1);
-        max = (int64_t)atoll(gtid_str);
-        if (min == 0) {
-          min = max;
-        }
-        gtid_set->gtids[count].max = max;
-        gtid_set->gtids[count].min = min;
-        count++;
-        g_debug("add gtid interval, max:%lld, min:%lld", max, min);
-        min = 0;
-      } else {
-        free_gtid_set(gtid_set);
-        return NULL;
-      }
-      q = p;
-    } else if (gtid[index] == '-') {
-      memset(gtid_str, 0, MGR_GTID_LEN);
-      p = gtid + index + 1;
-      if (p > (q + 1)) {
-        strncpy(gtid_str, q, p - q - 1);
-        min = (int64_t)atoll(gtid_str);
-      } else {
-        free_gtid_set(gtid_set);
-        return NULL;
-      }
-      q = p;
-    }
-    index++;
-  }
-
-  /* last value */
-  max = (int64_t)atoll(q);
-  if (min == 0) {
-    min = max;
-  }
-  if (count < gtid_set->size) {
-    gtid_set->gtids[count].max = max;
-    gtid_set->gtids[count].min = min;
-    g_debug("add gtid interval, max:%lld, min:%lld", max, min);
-
-#ifdef USE_GLIB_DEBUG_LOG
-    int i;
-    for (i = 0; i <= count; i++) {
-      g_debug("gtid interval, max:%lld, min:%lld", gtid_set->gtids[i].max,
-              gtid_set->gtids[i].min);
-    }
-#endif
-
-    return gtid_set;
-  } else {
-    g_message("unexpected count:%d, gtid size:%d, gtid:%s", count,
-              gtid_set->size, gtid);
-    free_gtid_set(gtid_set);
-    return NULL;
-  }
-}
-
-/**
- * if set1 is subset set2, then return GTID_LESSER.
- * if set1 is not subset set2 and if set2 is subset of set1 then return
- * GTID_GREATER.
- * if set1 is equals to set2, then return GTID_EQUAL
- */
-static int compare_gtid_set(gtid_set_t *set1, gtid_set_t *set2) {
-  int i, j;
-  int count = 0;
-  if (set1->num == set2->num) {
-    for (i = 0; i < set1->num; i++) {
-      for (j = 0; j < set2->num; j++) {
-        if (is_equal_set(set1->gtids + i, set2->gtids + j)) {
-          count++;
-          break;
-        }
-      }
-      if (j == set2->num) {
-        break;
-      }
-    }
-    if (count == set1->num) {
-      return GTID_EQUAL;
-    }
-  }
-
-  for (i = 0; i < set1->num; i++) {
-    for (j = 0; j < set2->num; j++) {
-      if (is_subset(set1->gtids + i, set2->gtids + j)) {
-        count++;
-        break;
-      }
-    }
-    if (j == set2->num) {
-      break;
-    }
-  }
-
-  if (count == set2->num) {
-    return GTID_GREATER;
-  }
-
-  count = 0;
-  for (i = 0; i < set2->num; i++) {
-    for (j = 0; j < set1->num; j++) {
-      if (is_subset(set2->gtids + i, set1->gtids + j)) {
-        count++;
-        break;
-      }
-    }
-    if (j == set1->num) {
-      break;
-    }
-  }
-
-  if (count == set1->num) {
-    return GTID_LESSER;
-  }
-
-  return GTID_UNKNOWN;
-}
 
 static int group_replication_restart_secondary(const char *backend_addr,
                                                cetus_monitor_t *monitor) {
@@ -564,40 +335,81 @@ static int group_replication_restart(network_backends_t *bs,
   return 0;
 }
 
-static gtid_set_t *group_replication_retrieve_gtid(struct chassis *srv,
-                                                   MYSQL *conn,
-                                                   const char *backend_addr) {
-  gchar *relay_gtid_sql = "select RECEIVED_TRANSACTION_SET from "
-                          "performance_schema.replication_connection_status";
-  if (mysql_real_query(conn, L(relay_gtid_sql))) {
-    g_message("retrieve relay gtid failed for group_replication. error: %d, "
-              "text: %s, backend: %s",
-              mysql_errno(conn), mysql_error(conn), backend_addr);
-    return NULL;
-  }
+static void copy_executed_gtid_to_backend(network_backend_t *backend,
+                                          gtid_set_t *executed_gtid_set) {
+    gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
+    gtid_set->num = executed_gtid_set->num;
+    gtid_set->size = gtid_set->num;
+    gtid_set->in_use = 0;
+    gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
 
-  MYSQL_RES *rs_set = mysql_store_result(conn);
-  if (rs_set == NULL) {
-    g_message("retrieve gtid result set failed for group_replication. "
-              "error: %d, text: %s, backend: %s",
-              mysql_errno(conn), mysql_error(conn), backend_addr);
-    return NULL;
-  }
-  MYSQL_ROW row = mysql_fetch_row(rs_set);
-  if (row == NULL) {
+    int i = 0;
+    for (; i < executed_gtid_set->num; i++) {
+      gtid_set->gtids[i] = executed_gtid_set->gtids[i];
+    }
+
+    gtid_set_t *old = NULL;
+    /* backend now uses last_update_gtid2 */
+    if (backend->use_gtid_index) {
+      /* Update last_update_gtid1 */
+      old = backend->last_update_gtid1;
+      backend->last_update_gtid1 = gtid_set;
+      backend->use_gtid_index = 0;
+    } else {
+      /* backend now uses last_update_gtid1 */
+      old = backend->last_update_gtid2;
+      backend->last_update_gtid2 = gtid_set;
+      backend->use_gtid_index = 1;
+    }
+
+    while (old->in_use) {
+      /*no op */
+    }
+
+    free_gtid_set(old);
+}
+
+static gtid_set_t *
+group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
+                                network_backend_t *backend,
+                                int need_to_retrieve_receive_gtid_set) {
+
+  gtid_set_t *relayed_gtid_set = NULL;
+
+  const char *backend_addr = backend->addr->name->str;
+  if (need_to_retrieve_receive_gtid_set) {
+    gchar *relay_gtid_sql = "select RECEIVED_TRANSACTION_SET from "
+                            "performance_schema.replication_connection_status";
+    if (mysql_real_query(conn, L(relay_gtid_sql))) {
+      g_message("retrieve relay gtid failed for group_replication. error: %d, "
+                "text: %s, backend: %s",
+                mysql_errno(conn), mysql_error(conn), backend_addr);
+      return NULL;
+    }
+
+    MYSQL_RES *rs_set = mysql_store_result(conn);
+    if (rs_set == NULL) {
+      g_message("retrieve gtid result set failed for group_replication. "
+                "error: %d, text: %s, backend: %s",
+                mysql_errno(conn), mysql_error(conn), backend_addr);
+      return NULL;
+    }
+    MYSQL_ROW row = mysql_fetch_row(rs_set);
+    if (row == NULL) {
+      mysql_free_result(rs_set);
+      return NULL;
+    }
+
+    gtid_set_t *relayed_gtid_set =
+        get_gtid_interval(row[0], srv->group_replication_group_name, 0);
+    if (relayed_gtid_set == NULL) {
+      g_message("relayed_gtid_set is null from backend:%s", backend_addr);
+    }
+
+    g_debug("relayed_gtid_set:%s from backend:%s", row[0], backend_addr);
+
     mysql_free_result(rs_set);
-    return NULL;
   }
-
-  gtid_set_t *relayed_gtid_set =
-      get_gtid_interval(row[0], srv->group_replication_group_name, 0);
-  if (relayed_gtid_set == NULL) {
-    g_message("relayed_gtid_set is null from backend:%s", backend_addr);
-  }
-
-  g_debug("relayed_gtid_set:%s from backend:%s", row[0], backend_addr);
-
-  mysql_free_result(rs_set);
 
   gchar *gtid_sql = "show variables like 'gtid_executed'";
   if (mysql_real_query(conn, L(gtid_sql))) {
@@ -610,7 +422,7 @@ static gtid_set_t *group_replication_retrieve_gtid(struct chassis *srv,
     return NULL;
   }
 
-  rs_set = mysql_store_result(conn);
+  MYSQL_RES *rs_set = mysql_store_result(conn);
   if (rs_set == NULL) {
     g_message("retrieve gtid result set failed for group_replication. "
               "error: %d, text: %s, backend: %s",
@@ -620,7 +432,7 @@ static gtid_set_t *group_replication_retrieve_gtid(struct chassis *srv,
     }
     return NULL;
   }
-  row = mysql_fetch_row(rs_set);
+  MYSQL_ROW row = mysql_fetch_row(rs_set);
   if (row == NULL) {
     if (relayed_gtid_set) {
       free_gtid_set(relayed_gtid_set);
@@ -634,6 +446,8 @@ static gtid_set_t *group_replication_retrieve_gtid(struct chassis *srv,
                         relayed_gtid_set ? relayed_gtid_set->num : 0);
   if (executed_gtid_set == NULL) {
     g_critical("executed_gtid_set is null from backend:%s", backend_addr);
+  } else {
+    copy_executed_gtid_to_backend(backend, executed_gtid_set);
   }
 
   g_debug("executed_gtid_set:%s from backend:%s", row[1], backend_addr);
@@ -758,6 +572,7 @@ static void group_replication_detect(network_backends_t *bs,
   int valid_mgr_node_num = 0;
   int write_num = 0;
   int has_online_node = 0;
+  int need_to_retrieve_receive_gtid_set = 0;
 
   g_debug("group_replication_detect is called");
   gchar *sql = "SELECT `MEMBER_STATE`, `MEMBER_HOST`, `MEMBER_PORT`, "
@@ -801,7 +616,6 @@ static void group_replication_detect(network_backends_t *bs,
 
     int valid_node = 0;
     int index = 0;
-    int need_retrieve_gtid = 0;
     /* Check if each node's info is valid */
     do {
       MYSQL_ROW row = mysql_fetch_row(rs_set);
@@ -813,7 +627,7 @@ static void group_replication_detect(network_backends_t *bs,
       if (strcasecmp(row[0], "OFFLINE") == 0) {
         offline[i] = 1;
         /* Retrieve most updated gtid for selecting master */
-        need_retrieve_gtid = 1;
+        need_to_retrieve_receive_gtid_set = 1;
         break;
       }
 
@@ -858,49 +672,46 @@ static void group_replication_detect(network_backends_t *bs,
 
     mysql_free_result(rs_set);
 
-    if (need_retrieve_gtid) {
-      g_debug("before group_replication_retrieve_gtid,biggest gtid addr:%p,"
-              "backend_addr:%p",
-              biggest_gtid_node_addr, backend_addr);
-      gtid_set_t *gtid_set =
-          group_replication_retrieve_gtid(monitor->chas, conn, backend_addr);
-      if (gtid_set == NULL) {
-        continue;
-      }
-      if (max_gtid_set == NULL) {
+    g_debug("before group_replication_retrieve_gtid,biggest gtid addr:%p,"
+            "backend_addr:%p",
+            biggest_gtid_node_addr, backend_addr);
+    gtid_set_t *gtid_set = group_replication_retrieve_gtid(
+        monitor->chas, conn, backend, need_to_retrieve_receive_gtid_set);
+    if (gtid_set == NULL) {
+      continue;
+    }
+    if (max_gtid_set == NULL) {
+      max_gtid_set = gtid_set;
+      biggest_gtid_node_addr = backend_addr;
+    } else {
+      /* compare gtid set */
+      int compared_value = compare_gtid_set(gtid_set, max_gtid_set);
+      g_debug("compare_gtid_set result:%d, current backend:%s, last candidate "
+              "primary:%s",
+              compared_value, backend_addr, biggest_gtid_node_addr);
+
+      if (compared_value == GTID_GREATER) {
+        free_gtid_set(max_gtid_set);
         max_gtid_set = gtid_set;
         biggest_gtid_node_addr = backend_addr;
-      } else {
-        /* compare gtid set */
-        int compared_value = compare_gtid_set(gtid_set, max_gtid_set);
-        g_debug(
-            "compare_gtid_set result:%d, current backend:%s, last candidate "
-            "primary:%s",
-            compared_value, backend_addr, biggest_gtid_node_addr);
-
-        if (compared_value == GTID_GREATER) {
-          free_gtid_set(max_gtid_set);
-          max_gtid_set = gtid_set;
-          biggest_gtid_node_addr = backend_addr;
-        } else if (compared_value == GTID_EQUAL) {
-          if (monitor->chas->is_backend_multi_write == 0) {
-            if (backend->type == BACKEND_TYPE_RW) {
-              biggest_gtid_node_addr = backend_addr;
-            }
-          } else {
-            if (strcmp(biggest_gtid_node_addr, backend_addr) > 0) {
-              biggest_gtid_node_addr = backend_addr;
-            }
+      } else if (compared_value == GTID_EQUAL) {
+        if (monitor->chas->is_backend_multi_write == 0) {
+          if (backend->type == BACKEND_TYPE_RW) {
+            biggest_gtid_node_addr = backend_addr;
           }
-          free_gtid_set(gtid_set);
-        } else if (compared_value == GTID_LESSER) {
-          free_gtid_set(gtid_set);
         } else {
-          free_gtid_set(gtid_set);
-          free_gtid_set(max_gtid_set);
-          g_critical("gtid in mgr cluster is not compatible");
-          return;
+          if (strcmp(biggest_gtid_node_addr, backend_addr) > 0) {
+            biggest_gtid_node_addr = backend_addr;
+          }
         }
+        free_gtid_set(gtid_set);
+      } else if (compared_value == GTID_LESSER) {
+        free_gtid_set(gtid_set);
+      } else {
+        free_gtid_set(gtid_set);
+        free_gtid_set(max_gtid_set);
+        g_critical("gtid in mgr cluster is not compatible");
+        return;
       }
     }
 
