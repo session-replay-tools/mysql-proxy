@@ -415,6 +415,7 @@ struct network_mysqld_con {
    * to the low-level network implementation.
    */
   network_socket *client;
+  gchar *last_tracked_gtid;
 
   /**
    * Function pointers to the plugin's callbacks.

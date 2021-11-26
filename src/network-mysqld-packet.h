@@ -69,6 +69,7 @@ typedef struct {
   guint64 bytes;
 
   guint8 query_status;
+  gchar *gtid;
 } network_mysqld_com_query_result_t;
 
 /**
@@ -168,7 +169,7 @@ typedef struct {
   guint16 server_status;
   guint16 warnings;
 
-  gchar *msg;
+  gchar *gtid;
 } network_mysqld_ok_packet_t;
 
 NETWORK_API network_mysqld_ok_packet_t *network_mysqld_ok_packet_new(void);

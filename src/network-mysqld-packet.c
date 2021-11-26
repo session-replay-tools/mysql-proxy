@@ -48,6 +48,10 @@ void network_mysqld_com_query_result_free(
   if (!udata)
     return;
 
+  if (udata->gtid) {
+    g_free(udata->gtid);
+  }
+
   g_free(udata);
 }
 
@@ -100,6 +104,7 @@ int network_mysqld_proto_get_com_query_result(
         query->warning_count = ok_packet->warnings;
         query->affected_rows = ok_packet->affected_rows;
         query->insert_id = ok_packet->insert_id;
+        query->gtid = ok_packet->gtid;
         query->was_resultset = 0;
         query->binary_encoded = use_binary_row_data;
       }
@@ -920,9 +925,9 @@ void network_mysqld_ok_packet_free(network_mysqld_ok_packet_t *ok_packet) {
  */
 int network_mysqld_proto_get_ok_packet(network_packet *packet,
                                        network_mysqld_ok_packet_t *ok_packet) {
-  guint8 field_count;
+  guint8 field_count, sess_track_type;
   guint64 affected, insert_id;
-  guint16 server_status, warning_count = 0;
+  guint16 server_status, warning_count = 0, total_len = 0;
   guint32 capabilities = CLIENT_PROTOCOL_41;
 
   int err = 0;
@@ -950,6 +955,33 @@ int network_mysqld_proto_get_ok_packet(network_packet *packet,
     ok_packet->server_status = server_status;
     ok_packet->warnings = warning_count;
     g_debug("%s: server status, got: %d", G_STRLOC, ok_packet->server_status);
+    if (server_status & SERVER_SESSION_STATE_CHANGED) {
+      err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
+      if (!err) {
+        if (total_len == 0) {
+          err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
+          err = err || network_mysqld_proto_get_int8(packet, &sess_track_type);
+          if (!err) {
+            if (sess_track_type == SESSION_TRACK_GTIDS) {
+              err = err ||
+                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
+              err = err ||
+                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
+              err = err ||
+                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
+
+              /* Read gtid info here */
+              gchar *gtid = NULL;
+              err = err ||
+                    network_mysqld_proto_get_str_len(packet, &gtid, total_len);
+              if (!err) {
+                ok_packet->gtid = gtid;
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   return err ? -1 : 0;
