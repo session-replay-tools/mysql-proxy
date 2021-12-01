@@ -389,10 +389,10 @@ int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
         }
         backend->slave_proximity_hit_count =
             backend->slave_proximity_hit_count + 1;
-        g_message("%s:proximity, min_avg_resp_time:%f, candidate get conn from "
-                  "backend:%s, count:%lld",
-                  G_STRLOC, min_avg_resp_time, backend->addr->name->str,
-                  backend->slave_proximity_hit_count);
+        g_debug("%s:proximity, min_avg_resp_time:%f, candidate get conn from "
+                "backend:%s, count:%lld",
+                G_STRLOC, min_avg_resp_time, backend->addr->name->str,
+                backend->slave_proximity_hit_count);
       }
       if (session_causal_read) {
         if (!client_tracked_gtid) {
@@ -559,6 +559,10 @@ gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
       gtid = valid_gtid;
       len = strlen(valid_gtid);
     }
+  }
+
+  if (len == 0) {
+    return NULL;
   }
 
   /* find intervals */
