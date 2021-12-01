@@ -42,6 +42,7 @@ typedef enum {
 } backend_state_t;
 
 #define NO_PREVIOUS_STATE -1
+#define PING_SAMPLE_NUM 30
 
 typedef enum {
   BACKEND_TYPE_UNKNOWN,
@@ -91,13 +92,19 @@ typedef struct {
   network_connection_pool *pool; /**< the pool of open connections */
 
   /**< number of open connections to this backend for SQF */
+  int last_resp_time_array[PING_SAMPLE_NUM];
   int connected_clients;
+  int last_resp_time_array_index;
   unsigned int already_processed : 1;
   unsigned int use_gtid_index : 1;
 
   backend_config *config;
 
   time_t last_check_time;
+  double last_avg_resp_time;
+  long long slave_proximity_hit_count;
+  long long slave_causal_read_hit_count;
+  long long actual_hits;
   GString *server_version;
   gtid_set_t *last_update_gtid1;
   gtid_set_t *last_update_gtid2;
@@ -136,7 +143,7 @@ int network_backends_find_address(network_backends_t *bs, const char *);
 
 void network_backends_server_version(network_backends_t *b, GString* version);
 
-int network_backends_get_ro_ndx(network_backends_t *, int, gtid_set_t *);
+int network_backends_get_ro_ndx(network_backends_t *, int, gtid_set_t *, int);
 
 int network_backends_get_rw_ndx(network_backends_t *);
 

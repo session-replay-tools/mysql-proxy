@@ -372,6 +372,13 @@ static void copy_executed_gtid_to_backend(network_backend_t *backend,
   }
 }
 
+static double getusec() {
+  struct timeval tp;
+  gettimeofday(&tp, NULL);
+  double sec = tp.tv_sec * 1000000 + (1.0 * tp.tv_usec);
+  return sec;
+}
+
 static gtid_set_t *
 group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
                                 network_backend_t *backend,
@@ -380,6 +387,54 @@ group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
   gtid_set_t *relayed_gtid_set = NULL;
 
   const char *backend_addr = backend->addr->name->str;
+
+  if (srv->auto_read_optimized) {
+    gchar *simple_query = "select 1";
+    double start = getusec();
+    if (mysql_real_query(conn, L(simple_query))) {
+      g_message("select 1 failed for group_replication. error: %d, "
+                "text: %s, backend: %s",
+                mysql_errno(conn), mysql_error(conn), backend_addr);
+      return NULL;
+    }
+
+    double end = getusec();
+    backend->last_resp_time_array[backend->last_resp_time_array_index] =
+        (int)(end - start);
+    backend->last_resp_time_array_index =
+        (backend->last_resp_time_array_index + 1) % PING_SAMPLE_NUM;
+    int index, num = 0;
+    double total_resp_time = 0;
+    for (index = 0; index < PING_SAMPLE_NUM; index++) {
+      if (backend->last_resp_time_array[index]) {
+        num++;
+        total_resp_time += backend->last_resp_time_array[index];
+      }
+    }
+
+    if (num) {
+      backend->last_avg_resp_time = total_resp_time / num;
+      g_debug(
+          "last avg resp time:%f from backend:%s, num:%d, total_resp_time:%f",
+          backend->last_avg_resp_time, backend_addr, num, total_resp_time);
+    }
+
+    MYSQL_RES *rs_set = mysql_store_result(conn);
+    if (rs_set == NULL) {
+      g_message("select 1 failed for group_replication. "
+                "error: %d, text: %s, backend: %s",
+                mysql_errno(conn), mysql_error(conn), backend_addr);
+      return NULL;
+    }
+    MYSQL_ROW row = mysql_fetch_row(rs_set);
+    if (row == NULL) {
+      mysql_free_result(rs_set);
+      return NULL;
+    }
+
+    mysql_free_result(rs_set);
+  }
+
   if (need_to_retrieve_receive_gtid_set) {
     gchar *relay_gtid_sql = "select RECEIVED_TRANSACTION_SET from "
                             "performance_schema.replication_connection_status";
@@ -733,10 +788,11 @@ static void group_replication_detect(network_backends_t *bs,
       valid_mgr_node_num = index;
       biggest_gtid_node_addr = NULL;
 
-      if (!monitor->chas->session_causal_read) {
-        break;
-      } else {
+      if (monitor->chas->session_causal_read ||
+          monitor->chas->auto_read_optimized) {
         continue_to_retrieve_slave_gtids = 1;
+      } else {
+        break;
       }
     } else {
       if (index > valid_mgr_node_num) {

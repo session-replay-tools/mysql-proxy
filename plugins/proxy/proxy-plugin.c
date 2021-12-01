@@ -1569,6 +1569,7 @@ static network_mysqld_stmt_ret network_read_query(network_mysqld_con *con,
       break;
     }
   } else {
+    backend->actual_hits = backend->actual_hits + 1;
     if (backend->type == BACKEND_TYPE_RW) {
       con->srv->query_stats.proxyed_query.rw++;
       con->srv->query_stats.server_query_details[st->backend_ndx].rw++;
@@ -1893,17 +1894,17 @@ static gboolean proxy_get_backend_ndx(network_mysqld_con *con, int type,
   int idx;
   if (type == BACKEND_TYPE_RO) {
     if (force_slave) {
-      idx = network_backends_get_ro_ndx(g->backends,
-                                        con->srv->session_causal_read,
-                                        con->session_tracked_gtids);
+      idx = network_backends_get_ro_ndx(
+          g->backends, con->srv->session_causal_read,
+          con->session_tracked_gtids, con->srv->auto_read_optimized);
     } else {
       int x = g_random_int_range(0, 100);
       if (x < con->config->read_master_percentage) {
         idx = network_backends_get_rw_ndx(g->backends);
       } else {
-        idx = network_backends_get_ro_ndx(g->backends,
-                                          con->srv->session_causal_read,
-                                          con->session_tracked_gtids);
+        idx = network_backends_get_ro_ndx(
+            g->backends, con->srv->session_causal_read,
+            con->session_tracked_gtids, con->srv->auto_read_optimized);
       }
       g_debug(G_STRLOC ": %d, read_master_percentage: %d, read: %d", x,
               con->config->read_master_percentage, idx);

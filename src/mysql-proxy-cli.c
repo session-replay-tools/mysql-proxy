@@ -100,6 +100,7 @@ struct chassis_frontend_t {
   int max_alive_time;
   int master_preferred;
   int session_causal_read;
+  int auto_read_optimized;
   int config_port;
   int disable_threads;
   int is_tcp_stream_enabled;
@@ -462,6 +463,11 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
       opts, "session-causal-read", 0, 0, OPTION_ARG_NONE,
       &(frontend->session_causal_read), "Support session causal read", NULL,
       NULL, show_session_causal_read, SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
+  chassis_options_add(opts, "enable-read-proximity", 0, 0, OPTION_ARG_NONE,
+                      &(frontend->auto_read_optimized),
+                      "Support read proximity", NULL, NULL, show_read_proximity,
+                      SHOW_OPTS_PROPERTY | SAVE_OPTS_PROPERTY);
+
   chassis_options_add(opts, "max-allowed-packet", 0, 0, OPTION_ARG_INT,
                       &(frontend->cetus_max_allowed_packet),
                       "Max allowed packet as in mysql", "<int>",
@@ -638,6 +644,7 @@ static void init_parameters(struct chassis_frontend_t *frontend, chassis *srv) {
   srv->compress_support = frontend->is_client_compress_support;
   srv->master_preferred = frontend->master_preferred;
   srv->session_causal_read = frontend->session_causal_read;
+  srv->auto_read_optimized = frontend->auto_read_optimized;
   srv->disable_dns_cache = frontend->disable_dns_cache;
   srv->client_idle_timeout = MAX(frontend->client_idle_timeout, 10);
   srv->incomplete_tran_idle_timeout =

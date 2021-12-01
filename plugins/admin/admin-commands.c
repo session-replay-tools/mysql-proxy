@@ -98,6 +98,16 @@ void admin_select_all_backends(network_mysqld_con* con)
   g_ptr_array_add(fields, field);
 
   field = network_mysqld_proto_fielddef_new();
+  field->name = g_strdup("candidate_proximity");
+  field->type = MYSQL_TYPE_STRING;
+  g_ptr_array_add(fields, field);
+
+  field = network_mysqld_proto_fielddef_new();
+  field->name = g_strdup("actual_hits");
+  field->type = MYSQL_TYPE_STRING;
+  g_ptr_array_add(fields, field);
+
+  field = network_mysqld_proto_fielddef_new();
   field->name = g_strdup("idle_conns");
   field->type = MYSQL_TYPE_STRING;
   g_ptr_array_add(fields, field);
@@ -138,6 +148,12 @@ void admin_select_all_backends(network_mysqld_con* con)
     g_ptr_array_add(row, g_strdup(backend->addr->name->str));
     g_ptr_array_add(row, g_strdup(states[(int)(backend->state)]));
     g_ptr_array_add(row, g_strdup(types[(int)(backend->type)]));
+
+    sprintf(buffer, "%lld", backend->slave_proximity_hit_count);
+    g_ptr_array_add(row, g_strdup(buffer));
+
+    sprintf(buffer, "%lld", backend->actual_hits);
+    g_ptr_array_add(row, g_strdup(buffer));
 
     sprintf(buffer, "%d", backend->pool->cur_idle_connections);
     g_ptr_array_add(row, g_strdup(buffer));

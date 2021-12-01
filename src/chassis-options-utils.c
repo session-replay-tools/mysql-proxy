@@ -1031,6 +1031,19 @@ gchar *show_session_causal_read(gpointer param) {
   return NULL;
 }
 
+gchar *show_read_proximity(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%s", srv->auto_read_optimized ? "true" : "false");
+  }
+  if (CAN_SAVE_OPTS_PROPERTY(opt_type)) {
+    return srv->auto_read_optimized ? g_strdup("true") : NULL;
+  }
+  return NULL;
+}
+
 gchar*
 show_max_allowed_packet(gpointer param) {
   struct external_param *opt_param = (struct external_param *)param;
