@@ -45,6 +45,8 @@
 #include "network-conn-pool-wrap.h"
 #include "cetus-util.h"
 
+#define SERVER_TELL_CLOSE_LEN 149
+
 /**
  * handle the events of a idling server connection in the pool
  *
@@ -68,8 +70,10 @@ static void network_mysqld_con_idle_handle(int event_fd, short events,
       g_critical("ioctl(%d, FIONREAD) failed: %s", event_fd, g_strerror(errno));
     } else {
       if (b != 0) {
-        g_critical("ioctl(%d, FIONREAD) said something to read, oops: %d",
-                   event_fd, b);
+        if (b != SERVER_TELL_CLOSE_LEN) {
+          g_critical("ioctl(%d, FIONREAD) said something to read, oops: %d",
+                     event_fd, b);
+        }
       }
       /* the server decided the close the connection (wait_timeout, crash, ... )
        *
