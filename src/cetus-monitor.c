@@ -469,7 +469,7 @@ group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
     mysql_free_result(rs_set);
   }
 
-  gchar *gtid_sql = "show variables like 'gtid_executed'";
+  gchar *gtid_sql = "show global variables like 'gtid_executed'";
   if (mysql_real_query(conn, L(gtid_sql))) {
     g_message("retrieve gtid failed for group_replication. error: %d, "
               "text: %s, backend: %s",
