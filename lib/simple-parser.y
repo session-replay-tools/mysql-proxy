@@ -87,6 +87,10 @@ struct transact_feature_t {
     int isolation_level;
 };
 
+struct consistency_mode_t{
+    int consistency_mode;
+};
+
 } // end %include
 
 // Input is a single SQL command
@@ -147,8 +151,14 @@ anylist ::= anylist ANY.
 cmd ::= SET nexprlist(X). {
     sql_set_variable(context, X);
 }
+
 cmd ::= SET NAMES ID|STRING(X). {
     sql_set_names(context, sql_token_dup(X));
+}
+
+cmd ::= SET opt_var_scope(S) CONSISTENCY consistency_feature(T). {
+    context->rc = PARSE_HEAD;
+    sql_set_consistency_mode(context, S, T.consistency_mode);
 }
 
 cmd ::= SET opt_var_scope(S) TRANSACTION transact_feature(T). {
@@ -188,6 +198,35 @@ opt_var_scope(A) ::= GLOBAL. { A = SCOPE_GLOBAL; }
 opt_var_scope(A) ::= SESSION. { A = SCOPE_SESSION; }
 opt_var_scope(A) ::= . { A = SCOPE_TRANSIENT; }
 
+%type consistency_feature { struct consistency_mode_t }
+consistency_feature(A) ::= MODE mode(X). {
+    A.consistency_mode = X;
+}
+%type mode {int}
+mode(A) ::= EVENTUAL. {
+    A = TF_EVENTUAL;
+}
+mode(A) ::= READ MY WRITES. {
+    A = TF_READ_MY_WRITES;
+}
+mode(A) ::= PREFIX. {
+    A = TF_PREFIX;
+}
+mode(A) ::= BOUNDED STALENESS. {
+    A = TF_BOUNDED_STALENESS;
+}
+mode(A) ::= MONOTONIC. {
+    A = TF_MONOTONIC;
+}
+mode(A) ::= STRONG. {
+    A = TF_STRONG;
+}
+mode(A) ::= PREFIX AND MONOTONIC. {
+    A = TF_PREFIX | TF_MONOTONIC;
+}
+mode(A) ::= PREFIX AND BOUNDED STALENESS. {
+    A = TF_PREFIX | TF_BOUNDED_STALENESS;
+}
 
 //////////////////////// KILL ! not supported ! ////////////////////////////
 cmd ::= cmd_head ANY.

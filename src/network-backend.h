@@ -25,13 +25,14 @@
 #include "config.h"
 #endif
 
-#include "network-conn-pool.h"
 #include "chassis-mainloop.h"
+#include "network-conn-pool.h"
 
 #include "network-exports.h"
 #ifdef HAVE_OPENSSL
 #include <openssl/rsa.h>
 #endif
+
 typedef enum {
   BACKEND_STATE_UNKNOWN,
   BACKEND_STATE_UP,
@@ -43,6 +44,7 @@ typedef enum {
 
 #define NO_PREVIOUS_STATE -1
 #define PING_SAMPLE_NUM 30
+#define LAST_GTID_HISTORY_SIZE 600
 
 typedef enum {
   BACKEND_TYPE_UNKNOWN,
@@ -95,6 +97,7 @@ typedef struct {
   int last_resp_time_array[PING_SAMPLE_NUM];
   int connected_clients;
   int last_resp_time_array_index;
+  int last_gtid_history_index;
   unsigned int already_processed : 1;
   unsigned int use_gtid_index : 1;
 
@@ -108,6 +111,7 @@ typedef struct {
   GString *server_version;
   gtid_set_t *last_update_gtid1;
   gtid_set_t *last_update_gtid2;
+  gtid_set_t *last_gtid_history[LAST_GTID_HISTORY_SIZE];
 } network_backend_t;
 
 NETWORK_API network_backend_t *network_backend_new();
@@ -142,8 +146,6 @@ NETWORK_API gboolean network_backends_load_config(network_backends_t *, chassis 
 int network_backends_find_address(network_backends_t *bs, const char *);
 
 void network_backends_server_version(network_backends_t *b, GString* version);
-
-int network_backends_get_ro_ndx(network_backends_t *, int, gtid_set_t *, int);
 
 int network_backends_get_rw_ndx(network_backends_t *);
 

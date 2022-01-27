@@ -61,6 +61,7 @@ enum sql_stmt_type_t {
   STMT_SET,
   STMT_SET_NAMES,
   STMT_SET_TRANSACTION,
+  STMT_SET_CONSISTENCY,
   STMT_ROLLBACK,
   STMT_COMMIT,
   STMT_CALL,
@@ -99,6 +100,15 @@ enum sql_trx_feature_t {
   TF_REPEATABLE_READ,
   TF_READ_COMMITTED,
   TF_READ_UNCOMMITTED,
+};
+
+enum sql_consistency_feature_t {
+  TF_EVENTUAL = 0,
+  TF_READ_MY_WRITES = 1,
+  TF_PREFIX = 2,
+  TF_MONOTONIC = 4,
+  TF_BOUNDED_STALENESS = 8,
+  TF_STRONG = 16
 };
 
 enum sql_clause_flag_t {
@@ -240,6 +250,10 @@ typedef struct sql_set_transaction_t {
   enum sql_trx_feature_t rw_feature;
   enum sql_trx_feature_t level;
 } sql_set_transaction_t;
+
+typedef struct sql_set_consistency_mode_t {
+  enum sql_consistency_feature_t consistency_mode;
+} sql_set_consistency_mode_t;
 
 char *sql_token_dup(sql_token_t);
 

@@ -77,6 +77,7 @@ CHASSIS_API gchar* show_default_client_idle_timeout(gpointer param);
 CHASSIS_API gchar* show_default_incomplete_tran_idle_timeout(gpointer param);
 CHASSIS_API gchar* show_default_maintained_client_idle_timeout(gpointer param);
 CHASSIS_API gchar* show_long_query_time(gpointer param);
+CHASSIS_API gchar *show_bounded_staleness_time(gpointer param);
 CHASSIS_API gchar* show_enable_client_found_rows(gpointer param);
 CHASSIS_API gchar* show_reduce_connections(gpointer param);
 CHASSIS_API gchar* show_enable_tcp_stream(gpointer param);
@@ -91,6 +92,7 @@ CHASSIS_API gchar *show_read_proximity(gpointer param);
 CHASSIS_API gchar* show_max_allowed_packet(gpointer param);
 CHASSIS_API gchar* show_remote_conf_url(gpointer param);
 CHASSIS_API gchar* show_trx_isolation_level(gpointer param);
+CHASSIS_API gchar *show_read_consistency_level(gpointer param);
 CHASSIS_API gchar* show_group_replication_mode(gpointer param);
 CHASSIS_API gchar* show_sql_log_bufsize(gpointer param);
 CHASSIS_API gchar* show_sql_log_switch(gpointer param);
@@ -119,6 +121,8 @@ CHASSIS_API gint assign_default_incomplete_tran_idle_timeout(const gchar *newval
 CHASSIS_API gint assign_default_maintained_client_idle_timeout(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_long_query_time(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_max_allowed_packet(const gchar *newval, gpointer param);
+CHASSIS_API gint assign_bounded_staleness_time(const gchar *newval,
+                                               gpointer param);
 CHASSIS_API gint assign_group_replication(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_sql_log_switch(const gchar *newval, gpointer param);
 CHASSIS_API gint assign_sql_log_mode(const gchar *newval, gpointer param);

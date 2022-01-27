@@ -184,6 +184,22 @@ void sql_set_transaction(sql_context_t *ps, int scope, int rw_feature,
   sql_context_add_stmt(ps, STMT_SET_TRANSACTION, set_tran);
 }
 
+void sql_set_consistency_mode(sql_context_t *ps, int scope, int mode) {
+  if (ps->property) {
+    sql_context_set_error(ps, PARSE_NOT_SUPPORT,
+                          "Commanding comment is not allowed in SET clause");
+    return;
+  }
+  if (scope == SCOPE_GLOBAL) {
+    sql_context_set_error(ps, PARSE_NOT_SUPPORT,
+                          "GLOBAL scope SET SESSION is not supported now");
+    return;
+  }
+  sql_set_consistency_mode_t *read_type = g_new0(sql_set_consistency_mode_t, 1);
+  read_type->consistency_mode = mode;
+  sql_context_add_stmt(ps, STMT_SET_CONSISTENCY, read_type);
+}
+
 void sql_use_database(sql_context_t *ps, char *val) {
   ps->rw_flag |= CF_READ;
   sql_context_add_stmt(ps, STMT_USE, val);

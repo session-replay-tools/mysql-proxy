@@ -670,6 +670,7 @@ char *sql_get_token_name(int op) {
                     {TK_RESTRICT, "TK_RESTRICT  "},
                     {TK_ROW, "TK_ROW       "},
                     {TK_TRANSACTION, "TK_TRANSACTION"},
+                    {TK_CONSISTENCY, "TK_CONSISTENCY"},
                     {TK_START, "TK_START"},
                     {TK_COMMIT, "TK_COMMIT"},
                     {TK_ROLLBACK, "TK_ROLLBACK  "},

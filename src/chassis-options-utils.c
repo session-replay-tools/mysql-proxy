@@ -847,8 +847,7 @@ assign_default_incomplete_tran_idle_timeout(const gchar *newval, gpointer param)
   return ret;
 }
 
-
-gchar* show_long_query_time(gpointer param) {
+gchar *show_long_query_time(gpointer param) {
   struct external_param *opt_param = (struct external_param *)param;
   chassis *srv = opt_param->chas;
   gint opt_type = opt_param->opt_type;
@@ -864,8 +863,7 @@ gchar* show_long_query_time(gpointer param) {
   return NULL;
 }
 
-gint
-assign_long_query_time(const gchar *newval, gpointer param) {
+gint assign_long_query_time(const gchar *newval, gpointer param) {
   gint ret = ASSIGN_ERROR;
   struct external_param *opt_param = (struct external_param *)param;
   chassis *srv = opt_param->chas;
@@ -876,6 +874,44 @@ assign_long_query_time(const gchar *newval, gpointer param) {
       if (try_get_int_value(newval, &value)) {
         if (value >= 0) {
           srv->long_query_time = value;
+          ret = ASSIGN_OK;
+        } else {
+          ret = ASSIGN_VALUE_INVALID;
+        }
+      } else {
+        ret = ASSIGN_VALUE_INVALID;
+      }
+    } else {
+      ret = ASSIGN_VALUE_INVALID;
+    }
+  }
+  return ret;
+}
+
+gchar *show_bounded_staleness_time(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%d (seconds)", srv->bounded_staleness_time);
+  }
+  if (CAN_SAVE_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%d", srv->bounded_staleness_time);
+  }
+  return NULL;
+}
+
+gint assign_bounded_staleness_time(const gchar *newval, gpointer param) {
+  gint ret = ASSIGN_ERROR;
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_ASSIGN_OPTS_PROPERTY(opt_type)) {
+    if (NULL != newval) {
+      int value = 0;
+      if (try_get_int_value(newval, &value)) {
+        if (value >= 0) {
+          srv->bounded_staleness_time = value;
           ret = ASSIGN_OK;
         } else {
           ret = ASSIGN_VALUE_INVALID;
@@ -1112,6 +1148,17 @@ show_trx_isolation_level(gpointer param) {
   return NULL;
 }
 
+gchar *show_read_consistency_level(gpointer param) {
+  struct external_param *opt_param = (struct external_param *)param;
+  chassis *srv = opt_param->chas;
+  gint opt_type = opt_param->opt_type;
+  if (CAN_SHOW_OPTS_PROPERTY(opt_type)) {
+    return g_strdup_printf("%s", srv->global_read_consistency_level != NULL
+                                     ? srv->global_read_consistency_level
+                                     : "NULL");
+  }
+  return NULL;
+}
 
 gchar*
 show_group_replication_mode(gpointer param) {

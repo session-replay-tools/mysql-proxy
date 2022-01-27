@@ -273,6 +273,8 @@ network_mysqld_con *network_mysqld_con_new() {
 
   con->wait_clt_next_sql.tv_sec = 0;
   con->wait_clt_next_sql.tv_usec = 256 * 1000;
+  con->consistent_read_server_index = -1;
+
   return con;
 }
 
@@ -1928,6 +1930,8 @@ network_socket_retval_t network_mysqld_read_rw_resp(network_mysqld_con *con,
             if (con->last_tracked_gtid) {
               g_debug("%s:old gtid:%s", G_STRLOC, con->last_tracked_gtid);
               g_free(con->last_tracked_gtid);
+            }
+            if (con->session_tracked_gtids) {
               free_gtid_set(con->session_tracked_gtids);
             }
             con->last_tracked_gtid = query->gtid;

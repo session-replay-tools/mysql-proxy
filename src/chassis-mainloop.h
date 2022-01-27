@@ -115,6 +115,7 @@ struct chassis {
   char *group_replication_group_name;
 
   unsigned int maintain_close_mode : 1;
+  unsigned int bounded_staleness_time : 9;
   unsigned int disable_threads : 1;
   unsigned int ssl : 1;
   unsigned int is_tcp_stream_enabled : 1;
@@ -140,6 +141,7 @@ struct chassis {
 
   unsigned int long_query_time;
   unsigned int internal_trx_isolation_level;
+  unsigned int global_read_consistency_level;
   int need_to_refresh_server_connections;
 
   int cpus;

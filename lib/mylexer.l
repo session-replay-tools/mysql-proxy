@@ -111,6 +111,7 @@ HEX_DIGIT [0-9a-fA-F]
 "ROW"           return TK_ROW        ;
 
 "TRANSACTION"   return TK_TRANSACTION;
+"CONSISTENCY"   return TK_CONSISTENCY;
 "START"         return TK_START;
 "COMMIT"        return TK_COMMIT;
 "ROLLBACK"      return TK_ROLLBACK   ;
@@ -212,8 +213,16 @@ HEX_DIGIT [0-9a-fA-F]
 "UNCOMMITTED"         return TK_UNCOMMITTED;
 "SERIALIZABLE"        return TK_SERIALIZABLE;
 "REPEATABLE"          return TK_REPEATABLE;
-"TRIM("                return TK_TRIM; //special function
-"POSITION("            return TK_POSITION; //special function
+"EVENTUAL"            return TK_EVENTUAL;
+"PREFIX"              return TK_PREFIX;
+"MY"                  return TK_MY;
+"WRITES"              return TK_WRITES;
+"MONOTONIC"           return TK_MONOTONIC;
+"STRONG"              return TK_STRONG;
+"BOUNDED"             return TK_BOUNDED;
+"STALENESS"           return TK_STALENESS;
+"TRIM("               return TK_TRIM; //special function
+"POSITION("           return TK_POSITION; //special function
 "BOTH"                return TK_TRIM_SPEC;
 "LEADING"             return TK_TRIM_SPEC;
 "TRAILING"            return TK_TRIM_SPEC;

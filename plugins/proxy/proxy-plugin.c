@@ -714,6 +714,10 @@ static int process_non_trans_query(network_mysqld_con *con,
       }
     }
 
+    if (!need_to_visit_master && (con->read_consistency_type & TF_STRONG)) {
+      need_to_visit_master = TRUE;
+    }
+
     break;
   }
   case STMT_SET_NAMES: {
@@ -1402,6 +1406,15 @@ static int process_query_or_stmt_prepare(network_mysqld_con *con,
                     con->orig_sql->str);
         }
       }
+    } else if (context->stmt_type == STMT_SET_CONSISTENCY) {
+      sql_set_consistency_mode_t *read_type;
+      read_type = (sql_set_consistency_mode_t *)context->sql_statement;
+      con->read_consistency_type = read_type->consistency_mode;
+      g_debug("%s:read_consistency_type:%d", G_STRLOC,
+              con->read_consistency_type);
+      network_mysqld_con_send_ok_full(con->client, 0, 0, 0, 0);
+      *disp_flag = PROXY_SEND_RESULT;
+      return 0;
     }
 
     if (network_mysqld_con_is_trx_feature_changed(con)) {
@@ -1887,6 +1900,220 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_read_query)
   return NETWORK_SOCKET_SUCCESS;
 }
 
+static gtid_set_t *
+copy_executed_gtid_to_session(gtid_set_t *executed_gtid_set) {
+  gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
+  gtid_set->num = executed_gtid_set->num;
+  gtid_set->size = gtid_set->num;
+  gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
+  gtid_set->in_use = 0;
+
+  int i = 0;
+  for (; i < executed_gtid_set->num; i++) {
+    gtid_set->gtids[i] = executed_gtid_set->gtids[i];
+  }
+
+  return gtid_set;
+}
+
+static gboolean proxy_get_bounded_staleness_gtid(network_mysqld_con *con) {
+  g_debug("proxy_get_bounded_staleness_gtid is called");
+  proxy_plugin_con_t *st = con->plugin_con_state;
+  chassis_private *g = con->srv->priv;
+  int count = network_backends_count(g->backends);
+  int i, index = 0;
+  for (i = 0; i < count; i++) {
+    network_backend_t *backend = network_backends_get(g->backends, i);
+    if ((BACKEND_TYPE_RW == backend->type) &&
+        (backend->state == BACKEND_STATE_UP ||
+         backend->state == BACKEND_STATE_UNKNOWN)) {
+      index = backend->last_gtid_history_index;
+      gtid_set_t *gtid = NULL;
+      int lag = con->max_lag_behind_time;
+      do {
+        index = (index + LAST_GTID_HISTORY_SIZE - lag) % LAST_GTID_HISTORY_SIZE;
+        gtid = backend->last_gtid_history[index];
+        if (gtid) {
+          gtid->in_use = 1;
+        } else {
+          lag--;
+          if (lag < 0) {
+            break;
+          }
+        }
+      } while (!gtid);
+
+      if (con->session_tracked_gtids) {
+        int result = compare_gtid_set(gtid, con->session_tracked_gtids);
+        if (result == GTID_LESSER || result == GTID_UNKNOWN) {
+          g_debug("gtid is not compatitable with backend:%s, result:%d",
+                  backend->addr->name->str, result);
+        } else {
+          g_debug("gtid is set for conn session_tracked_gtids");
+          con->session_tracked_gtids = copy_executed_gtid_to_session(gtid);
+        }
+      } else {
+        con->session_tracked_gtids = copy_executed_gtid_to_session(gtid);
+      }
+      gtid->in_use = 0;
+      break;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean proxy_get_slave_latest_gtid(network_mysqld_con *con) {
+  g_debug("proxy_get_slave_latest_gtid is called");
+  proxy_plugin_con_t *st = con->plugin_con_state;
+  chassis_private *g = con->srv->priv;
+  int count = network_backends_count(g->backends);
+  int i, index = 0;
+  for (i = 0; i < count; i++) {
+    network_backend_t *backend = network_backends_get(g->backends, i);
+    if ((BACKEND_TYPE_RO == backend->type) &&
+        (backend->state == BACKEND_STATE_UP ||
+         backend->state == BACKEND_STATE_UNKNOWN)) {
+      gtid_set_t *gtid = NULL;
+      if (backend->use_gtid_index) {
+        gtid = backend->last_update_gtid2;
+      } else {
+        gtid = backend->last_update_gtid1;
+      }
+      if (!gtid) {
+        g_debug("gtid is nullptr for backend:%d", i);
+        continue;
+      }
+      gtid->in_use = 1;
+
+      if (con->session_tracked_gtids) {
+        int result = compare_gtid_set(gtid, con->session_tracked_gtids);
+        if (result == GTID_LESSER || result == GTID_UNKNOWN) {
+          g_debug("gtid is not compatitable with backend:%s, result:%d",
+                  backend->addr->name->str, result);
+        } else {
+          g_debug("gtid is set for conn session_tracked_gtids");
+          con->session_tracked_gtids = copy_executed_gtid_to_session(gtid);
+        }
+      } else {
+        con->session_tracked_gtids = copy_executed_gtid_to_session(gtid);
+      }
+      gtid->in_use = 0;
+      break;
+    }
+  }
+
+  return TRUE;
+}
+
+static int network_backends_get_ro_ndx(network_backends_t *bs,
+                                       network_mysqld_con *con) {
+  g_debug("%s:call network_backends_get_ro_ndx", G_STRLOC);
+
+  int session_causal_read = con->srv->session_causal_read;
+  int proximity = con->srv->auto_read_optimized;
+  int read_consistency_type = con->read_consistency_type;
+  gtid_set_t *client_tracked_gtid = con->session_tracked_gtids;
+  int consistent_read_server_index = -1;
+  int count = network_backends_count(bs);
+
+  if (read_consistency_type & TF_PREFIX) {
+    consistent_read_server_index = con->consistent_read_server_index;
+    if (consistent_read_server_index >= count) {
+      consistent_read_server_index = 0;
+    }
+  }
+
+  GArray *active_ro_indices = g_array_sized_new(FALSE, TRUE, sizeof(int), 4);
+  int i = 0;
+  int proximity_index = 0;
+  double min_avg_resp_time = LLONG_MAX;
+  if (proximity) {
+    for (i = 0; i < count; i++) {
+      network_backend_t *backend = network_backends_get(bs, i);
+      if ((backend->type == BACKEND_TYPE_RO) &&
+          (backend->state == BACKEND_STATE_UP ||
+           backend->state == BACKEND_STATE_UNKNOWN)) {
+        if (backend->last_avg_resp_time < min_avg_resp_time) {
+          min_avg_resp_time = backend->last_avg_resp_time;
+          proximity_index = i;
+        }
+      }
+    }
+  }
+
+  for (i = 0; i < count; i++) {
+    network_backend_t *backend = network_backends_get(bs, i);
+    if ((backend->type == BACKEND_TYPE_RO) &&
+        (backend->state == BACKEND_STATE_UP ||
+         backend->state == BACKEND_STATE_UNKNOWN)) {
+      if (proximity) {
+        if (i != proximity_index) {
+          continue;
+        }
+        backend->slave_proximity_hit_count =
+            backend->slave_proximity_hit_count + 1;
+        g_debug("%s:proximity, min_avg_resp_time:%f, candidate get conn from "
+                "backend:%s, count:%lld",
+                G_STRLOC, min_avg_resp_time, backend->addr->name->str,
+                backend->slave_proximity_hit_count);
+      } else {
+        if (consistent_read_server_index >= 0) {
+          if (consistent_read_server_index != i) {
+            continue;
+          }
+        }
+      }
+      if ((read_consistency_type >= TF_READ_MY_WRITES)) {
+        if (!client_tracked_gtid) {
+          g_debug("client_tracked_gtid is nullptr");
+          break;
+        }
+        gtid_set_t *srv_gtids = NULL;
+        if (backend->use_gtid_index) {
+          srv_gtids = backend->last_update_gtid2;
+        } else {
+          srv_gtids = backend->last_update_gtid1;
+        }
+        if (!srv_gtids) {
+          g_debug("srv_gtids is nullptr for backend:%d", i);
+          break;
+        }
+        srv_gtids->in_use = 1;
+        int result = compare_gtid_set(srv_gtids, client_tracked_gtid);
+        if (result == GTID_LESSER || result == GTID_UNKNOWN) {
+          g_debug("gtid is not compatitable with backend:%s, result:%d",
+                  backend->addr->name->str, result);
+          srv_gtids->in_use = 0;
+          continue;
+        }
+        backend->slave_causal_read_hit_count =
+            backend->slave_causal_read_hit_count + 1;
+        srv_gtids->in_use = 0;
+        g_debug("gtid is compatitable with backend:%s, "
+                "slave_causal_read_hit_count:%f",
+                backend->addr->name->str, backend->slave_causal_read_hit_count);
+      } else {
+        g_debug("session_causal_read is false");
+      }
+      g_array_append_val(active_ro_indices, i);
+    }
+  }
+
+  int num = active_ro_indices->len;
+  int result = -1;
+  if (num > 0) {
+    result = g_array_index(active_ro_indices, int, (bs->read_count++) % num);
+    if (read_consistency_type & TF_PREFIX) {
+      con->consistent_read_server_index = result;
+    }
+  }
+
+  g_array_free(active_ro_indices, TRUE);
+
+  return result;
+}
+
 static gboolean proxy_get_backend_ndx(network_mysqld_con *con, int type,
                                       gboolean force_slave) {
   proxy_plugin_con_t *st = con->plugin_con_state;
@@ -1895,26 +2122,34 @@ static gboolean proxy_get_backend_ndx(network_mysqld_con *con, int type,
   con->max_retry_serv_cnt = 72;
   con->master_unavailable = 0;
 
+  if (con->read_consistency_type & TF_BOUNDED_STALENESS) {
+    proxy_get_bounded_staleness_gtid(con);
+  } else if (con->read_consistency_type & TF_MONOTONIC) {
+    proxy_get_slave_latest_gtid(con);
+  } else if (con->read_consistency_type & TF_PREFIX) {
+    if (con->session_tracked_gtids == NULL) {
+      proxy_get_slave_latest_gtid(con);
+    }
+  }
+
   int idx;
   if (type == BACKEND_TYPE_RO) {
     if (force_slave) {
-      idx = network_backends_get_ro_ndx(
-          g->backends, con->srv->session_causal_read,
-          con->session_tracked_gtids, con->srv->auto_read_optimized);
+      idx = network_backends_get_ro_ndx(g->backends, con);
     } else {
       int x = g_random_int_range(0, 100);
       if (x < con->config->read_master_percentage) {
         idx = network_backends_get_rw_ndx(g->backends);
+        con->consistent_read_server_index = -1;
       } else {
-        idx = network_backends_get_ro_ndx(
-            g->backends, con->srv->session_causal_read,
-            con->session_tracked_gtids, con->srv->auto_read_optimized);
+        idx = network_backends_get_ro_ndx(g->backends, con);
       }
       g_debug(G_STRLOC ": %d, read_master_percentage: %d, read: %d", x,
               con->config->read_master_percentage, idx);
     }
   } else { /* type == BACKEND_TYPE_RW */
     idx = network_backends_get_rw_ndx(g->backends);
+    con->consistent_read_server_index = -1;
   }
 
   if (idx == -1) {
@@ -2259,8 +2494,9 @@ NETWORK_MYSQLD_PLUGIN_PROTO(proxy_init)
   st->trx_isolation_level = con->srv->internal_trx_isolation_level;
 
   con->plugin_con_state = st;
-
   con->state = ST_CONNECT_SERVER;
+  con->read_consistency_type = con->srv->global_read_consistency_level;
+  con->max_lag_behind_time = con->srv->bounded_staleness_time;
 
   /* set the connection specific timeouts
    *

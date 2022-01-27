@@ -372,6 +372,31 @@ static void copy_executed_gtid_to_backend(network_backend_t *backend,
   }
 }
 
+static void copy_executed_gtid_to_history(network_backend_t *backend,
+                                          gtid_set_t *executed_gtid_set) {
+  gtid_set_t *gtid_set = g_new0(gtid_set_t, 1);
+  gtid_set->num = executed_gtid_set->num;
+  gtid_set->size = gtid_set->num;
+  gtid_set->gtids = g_new0(gtid_interval, gtid_set->size);
+  gtid_set->in_use = 0;
+
+  int i = 0;
+  for (; i < executed_gtid_set->num; i++) {
+    gtid_set->gtids[i] = executed_gtid_set->gtids[i];
+  }
+
+  int index = backend->last_gtid_history_index;
+  gtid_set_t *old = backend->last_gtid_history[index];
+  backend->last_gtid_history[index] = gtid_set;
+  backend->last_gtid_history_index = (index + 1) % LAST_GTID_HISTORY_SIZE;
+  if (old) {
+    while (old->in_use) {
+      /*no op */
+    }
+    free_gtid_set(old);
+  }
+}
+
 static double getusec() {
   struct timeval tp;
   gettimeofday(&tp, NULL);
@@ -506,6 +531,9 @@ group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
     g_critical("executed_gtid_set is null from backend:%s", backend_addr);
   } else {
     copy_executed_gtid_to_backend(backend, executed_gtid_set);
+    if (backend->type == BACKEND_TYPE_RW) {
+      copy_executed_gtid_to_history(backend, executed_gtid_set);
+    }
   }
 
   g_debug("executed_gtid_set:%s from backend:%s", row[1], backend_addr);
@@ -787,13 +815,7 @@ static void group_replication_detect(network_backends_t *bs,
       has_valid_mgr_partition = 1;
       valid_mgr_node_num = index;
       biggest_gtid_node_addr = NULL;
-
-      if (monitor->chas->session_causal_read ||
-          monitor->chas->auto_read_optimized) {
-        continue_to_retrieve_slave_gtids = 1;
-      } else {
-        break;
-      }
+      continue_to_retrieve_slave_gtids = 1;
     } else {
       if (index > valid_mgr_node_num) {
         valid_mgr_node_num = index;

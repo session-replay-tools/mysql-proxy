@@ -457,6 +457,10 @@ struct network_mysqld_con {
   int max_retry_serv_cnt;
   int prepare_stmt_count;
   int num_read_pending;
+  /* For consistent reading */
+  int read_consistency_type;
+  /* For consistent prefix reading */
+  int consistent_read_server_index;
 
   unsigned int key;
 
@@ -522,6 +526,7 @@ struct network_mysqld_con {
   unsigned int last_record_payload_len : 4;
   unsigned int fast_stream_last_exec_index : 4;
   unsigned int last_packet_id : 8;
+  unsigned int max_lag_behind_time : 9;
 
   guint32 partically_record_left_cnt;
 

@@ -29,6 +29,7 @@ void sql_set_variable(sql_context_t *, sql_expr_list_t *);
 void sql_set_names(sql_context_t *, char *);
 
 void sql_set_transaction(sql_context_t *, int scope, int rwfeature, int level);
+void sql_set_consistency_mode(sql_context_t *, int scope, int mode);
 
 void sql_select(sql_context_t *st, sql_select_t *select);
 

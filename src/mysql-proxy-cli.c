@@ -117,6 +117,7 @@ struct chassis_frontend_t {
   int incomplete_tran_idle_timeout;
   int maintained_client_idle_timeout;
   int disable_dns_cache;
+  int bounded_staleness_time;
   long long max_resp_len;
 
   guint invoke_dbg_on_crash;
@@ -148,6 +149,7 @@ struct chassis_frontend_t {
 
   char *remote_config_url;
   char *trx_isolation_level;
+  char *global_read_consistency_level;
 
   gint group_replication_mode;
 
@@ -186,6 +188,7 @@ struct chassis_frontend_t *chassis_frontend_new(void) {
   frontend->client_idle_timeout = 8 * HOURS;
   frontend->incomplete_tran_idle_timeout = 3600;
   frontend->maintained_client_idle_timeout = 30;
+  frontend->bounded_staleness_time = 60;
   frontend->long_query_time = 1000;
   frontend->cetus_max_allowed_packet = MAX_ALLOWED_PACKET_DEFAULT;
   frontend->disable_dns_cache = 0;
@@ -241,6 +244,7 @@ void chassis_frontend_free(struct chassis_frontend_t *frontend) {
 
   g_free(frontend->remote_config_url);
   g_free(frontend->trx_isolation_level);
+  g_free(frontend->global_read_consistency_level);
   g_free(frontend->sql_log_switch);
   g_free(frontend->sql_log_prefix);
   g_free(frontend->sql_log_path);
@@ -412,6 +416,13 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
                       "<integer>", assign_long_query_time, show_long_query_time,
                       ALL_OPTS_PROPERTY);
 
+  chassis_options_add(
+      opts, "default-bounded-staleness-time", 0, 0, OPTION_ARG_INT,
+      &(frontend->bounded_staleness_time),
+      "bounded staleness time for consistent reading in seconds (0~511)",
+      "<integer>", assign_bounded_staleness_time, show_bounded_staleness_time,
+      ALL_OPTS_PROPERTY);
+
   chassis_options_add(opts, "enable-client-found-rows", 0, 0, OPTION_ARG_NONE,
                       &(frontend->set_client_found_rows),
                       "Set client found rows flag", NULL, NULL,
@@ -482,6 +493,12 @@ int chassis_frontend_set_chassis_options(struct chassis_frontend_t *frontend,
                       "transaction isolation level, default: REPEATABLE READ",
                       "<string>", NULL, show_trx_isolation_level,
                       SHOW_OPTS_PROPERTY);
+  chassis_options_add(
+      opts, "global-read-consistency-level", 0, 0, OPTION_ARG_STRING,
+      &(frontend->global_read_consistency_level),
+      "global read consistency level, default: EVENTUAL", "<string>", NULL,
+      show_read_consistency_level, SHOW_OPTS_PROPERTY);
+
   chassis_options_add(
       opts, "group-replication-mode", 0, 0, OPTION_ARG_INT,
       &(frontend->group_replication_mode),
@@ -691,6 +708,43 @@ static void init_parameters(struct chassis_frontend_t *frontend, chassis *srv) {
   }
 
   g_message("trx isolation level value:%s", srv->trx_isolation_level);
+
+  if (frontend->global_read_consistency_level != NULL) {
+    if (strcasecmp(frontend->global_read_consistency_level, "EVENTUAL") == 0) {
+      srv->global_read_consistency_level = TF_EVENTUAL;
+    } else if (strcasecmp(frontend->global_read_consistency_level,
+                          "READ MY WRITES") == 0) {
+      srv->global_read_consistency_level = TF_READ_MY_WRITES;
+    } else if (strcasecmp(frontend->global_read_consistency_level, "PREFIX") ==
+               0) {
+      srv->global_read_consistency_level = TF_PREFIX;
+    } else if (strcasecmp(frontend->global_read_consistency_level,
+                          "BOUNDED STALENESS") == 0) {
+      srv->global_read_consistency_level = TF_BOUNDED_STALENESS;
+    } else if (strcasecmp(frontend->global_read_consistency_level,
+                          "MONOTONIC") == 0) {
+      srv->global_read_consistency_level = TF_MONOTONIC;
+    } else if (strcasecmp(frontend->global_read_consistency_level, "STRONG") ==
+               0) {
+      srv->global_read_consistency_level = TF_STRONG;
+    } else if (strcasecmp(frontend->global_read_consistency_level,
+                          "PREFIX AND MONOTONIC") == 0) {
+      srv->global_read_consistency_level = TF_PREFIX | TF_MONOTONIC;
+    } else if (strcasecmp(frontend->global_read_consistency_level,
+                          "PREFIX AND BOUNDED STALENESS") == 0) {
+      srv->global_read_consistency_level = TF_PREFIX | TF_BOUNDED_STALENESS;
+    } else {
+      srv->global_read_consistency_level = TF_EVENTUAL;
+      g_warning("trx isolation level:%s is not expected, use EVENTUAL instead",
+                frontend->global_read_consistency_level);
+    }
+  } else {
+    g_message("global read consistency level is not set");
+    srv->global_read_consistency_level = TF_EVENTUAL;
+  }
+
+  g_message("global read consistency level value:%d",
+            srv->global_read_consistency_level);
 }
 
 static void release_resouces_when_exit(struct chassis_frontend_t *frontend,
