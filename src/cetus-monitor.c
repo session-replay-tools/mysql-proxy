@@ -86,10 +86,10 @@ get_mysql_connection(cetus_monitor_t *monitor, char *addr) {
   if (!conn)
     return NULL;
 
-  unsigned int timeout = 3 * SECONDS;
+  unsigned int timeout = 6 * SECONDS;
   mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
   mysql_options(conn, MYSQL_OPT_WRITE_TIMEOUT, &timeout);
-  timeout = 6 * SECONDS;
+  timeout = 12 * SECONDS;
   mysql_options(conn, MYSQL_OPT_READ_TIMEOUT, &timeout);
 
   char **ip_port = g_strsplit(addr, ":", -1);
