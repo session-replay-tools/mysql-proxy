@@ -1914,20 +1914,13 @@ static gboolean proxy_get_backend_ndx(network_mysqld_con *con, int type,
               con->config->read_master_percentage, idx);
     }
   } else { /* type == BACKEND_TYPE_RW */
-
     proxy_plugin_con_t *st = con->plugin_con_state;
     if (st->sql_context->rw_flag & CF_DDL) {
       g_message("%s: audit ddl:%s from user '%s'@'%s'", G_STRLOC,
                 con->orig_sql->str, con->client->response->username->str,
                 con->client->src->name->str);
-      if (con->srv->is_backend_multi_write) {
-        idx = network_backends_get_multi_write_ndx_for_ddl(g->backends);
-      } else {
-        idx = network_backends_get_rw_ndx(g->backends);
-      }
-    } else {
-      idx = network_backends_get_rw_ndx(g->backends);
     }
+    idx = network_backends_get_rw_ndx(g->backends);
   }
 
   if (idx == -1) {
