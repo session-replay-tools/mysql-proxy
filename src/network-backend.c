@@ -452,6 +452,45 @@ int network_backends_get_rw_ndx(network_backends_t *bs) {
   return i < count ? i : -1;
 }
 
+int network_backends_get_multi_write_ndx_for_ddl(network_backends_t *bs) {
+  int i = 0, index = 0, max_index = 0;
+  const char *all_valid[MAX_SERVER_NUM];
+  int all_valid_index[MAX_SERVER_NUM];
+
+  for (i = 0; i < MAX_SERVER_NUM; i++) {
+    all_valid[i] = NULL;
+    all_valid_index[i] = 0;
+  }
+
+  int count = network_backends_count(bs);
+  for (i = 0; i < count; i++) {
+    network_backend_t *backend = network_backends_get(bs, i);
+    if ((backend->state == BACKEND_STATE_UP ||
+         backend->state == BACKEND_STATE_UNKNOWN)) {
+      all_valid[index] = backend->addr->name->str;
+      all_valid_index[index] = i;
+      index++;
+    }
+  }
+
+  const char *max_valid_address = NULL;
+  for (i = 0; i < index; i++) {
+    if (!max_valid_address) {
+      max_valid_address = all_valid[i];
+      max_index = i;
+    } else {
+      if (strcmp(max_valid_address, all_valid[i]) < 0) {
+        max_valid_address = all_valid[i];
+        max_index = i;
+      }
+    }
+  }
+
+  g_message("address:%s is selected for processing ddl", max_valid_address);
+
+  return max_index < count ? max_index : -1;
+}
+
 int network_backends_find_address(network_backends_t *bs, const char *ipport) {
   int count = network_backends_count(bs);
   int i = 0;

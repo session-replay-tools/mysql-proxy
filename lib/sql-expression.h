@@ -107,6 +107,7 @@ enum sql_clause_flag_t {
   CF_FORCE_MASTER = 0x04,
   CF_FORCE_SLAVE = 0x08,
   CF_LOCAL_QUERY = 0x10,
+  CF_DDL = 0x20,
 };
 
 enum sql_expr_flags_t {

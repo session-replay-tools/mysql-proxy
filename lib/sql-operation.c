@@ -91,7 +91,7 @@ void sql_savepoint(sql_context_t *st, int tk, char *name) {
 }
 
 void sql_drop_database(sql_context_t *st, sql_drop_database_t *drop_database) {
-  st->rw_flag |= CF_WRITE;
+  st->rw_flag |= CF_WRITE | CF_DDL;
   sql_context_add_stmt(st, STMT_DROP_DATABASE, drop_database);
 }
 

@@ -414,7 +414,7 @@ tcons ::= FOREIGN KEY LP eidlist RP.
 ////////////////////////// The DROP TABLE /////////////////////////////////////
 //
 cmd ::= DROP TABLE ifexists nm. {
-    context->rw_flag |= CF_WRITE;
+    context->rw_flag |= CF_WRITE|CF_DDL;
     sql_context_add_stmt(context, STMT_COMMON_DDL, NULL);
 }
 %type ifexists {int}
@@ -434,10 +434,29 @@ cmd ::= DROP db_schema ifexists(A) nm(B). {
 
 //////////////////////// ALTER TABLE //////////////////////////////////
 cmd ::= ALTER TABLE. {
-    context->rw_flag |= CF_WRITE;
+    context->rw_flag |= CF_WRITE|CF_DDL;
     sql_context_add_stmt(context, STMT_COMMON_DDL, NULL);
     context->rc = PARSE_HEAD;
 }
+
+//////////////////////// OTHER DDL //////////////////////////////////
+cmd_head ::= ddl_cmd_head. {
+    context->stmt_type = STMT_COMMON_DDL;
+    context->rc = PARSE_HEAD;
+    context->rw_flag |= CF_WRITE|CF_DDL;
+}
+
+ddl_cmd_head ::= CREATE DATABASE.
+ddl_cmd_head ::= DROP INDEX.
+ddl_cmd_head ::= CREATE opt_unique INDEX.
+
+ddl_cmd_head ::= CREATE VIEW.
+ddl_cmd_head ::= ALTER VIEW.
+ddl_cmd_head ::= DROP VIEW.
+ddl_cmd_head ::= TRUNCATE. /* optional TABLE */
+
+opt_unique ::= UNIQUE.
+opt_unique ::= .
 
 //////////////////////// The SELECT statement /////////////////////////////////
 //
