@@ -27,6 +27,8 @@ make install
 3. Modify proxy.conf 
 4. cp users.json.example users.json
 5. Modify users.json
+6. cd ..
+7. ./bin/cetus --defaults-file=conf/proxy.conf
 
 ### 5. How to modify proxy.conf
 1. Modify proxy-backend-addresses to be the primary address of MySQL Group Replication
