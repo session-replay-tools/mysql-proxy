@@ -48,7 +48,7 @@ Modify password appropriately for both your applications and MySQL.
 2. Cetus could not be compiled under MySQL 8.0 development.
 3. Cetus only works for MySQL Group Replication.
 4. Cetus only supports mysql_native_password.
-5. As for MySQL Group Replication, please use the modified version which could be downloaded at https://github.com/session-replay-tools/MySQL.
+5. As for MySQL Group Replication, please use the modified version which could be downloaded at https://github.com/session-replay-tools/percona-server-8.0.27-18 or https://github.com/session-replay-tools/MySQL-5.7.
 6. RESET MASTER before runing MySQL Group Replication
 7. Configure MySQL Group Replication before running cetus.
 8. The total num of connections to each MySQL is equal to default-pool-size plus worker-processes.
