@@ -1,5 +1,5 @@
 ## Introduction
-Cetus which originates from MySQL proxy is a high performance, stable, protocol aware proxy for MySQL Group Replication. 
+Cetus which originates from MySQL Proxy is a high performance, stable, protocol aware proxy for MySQL Group Replication. 
 
 ## Getting started
 
