@@ -44,6 +44,7 @@ network_backend_t *network_backend_new() {
   b->addr = network_address_new();
   b->address = g_string_new(NULL);
   b->server_version = g_string_new(NULL);
+  b->server_weight = 0;
 
   return b;
 }
@@ -156,7 +157,17 @@ int network_backends_add(network_backends_t *bs, const gchar *address,
   new_backend->state = state;
   new_backend->pool->srv = srv;
 
-  g_string_assign(new_backend->address, address);
+  char *weight_p = NULL;
+  if ((weight_p = strrchr(address, '#')) != NULL) {
+    bs->priority_mode = 1;
+    new_backend->server_weight = atoi(weight_p + 1);
+    if (new_backend->server_weight > MAX_WEIGHT_VALUE) {
+      new_backend->server_weight = MAX_WEIGHT_VALUE;
+    }
+    g_string_assign_len(new_backend->address, address, weight_p - address);
+  } else {
+    g_string_assign(new_backend->address, address);
+  }
 
   if (0 != network_address_set_address(new_backend->addr,
                                        new_backend->address->str)) {
@@ -354,79 +365,41 @@ gboolean network_backends_load_config(network_backends_t *bs, chassis *srv) {
   return 0;
 }
 
-/* round robin choose read only backend */
-int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
-                                gtid_set_t *client_tracked_gtid,
-                                int proximity) {
-  g_debug("%s:call network_backends_get_ro_ndx", G_STRLOC);
+static int network_backends_get_ro_ndx_by_priority(network_backends_t *bs) {
   GArray *active_ro_indices = g_array_sized_new(FALSE, TRUE, sizeof(int), 4);
   int count = network_backends_count(bs);
-  int i = 0;
-  int proximity_index = 0;
-  double min_avg_resp_time = LLONG_MAX;
-  if (proximity) {
-    for (i = 0; i < count; i++) {
-      network_backend_t *backend = network_backends_get(bs, i);
-      if ((backend->type == BACKEND_TYPE_RO) &&
-          (backend->state == BACKEND_STATE_UP ||
-           backend->state == BACKEND_STATE_UNKNOWN)) {
-        if (backend->last_avg_resp_time < min_avg_resp_time) {
-          min_avg_resp_time = backend->last_avg_resp_time;
-          proximity_index = i;
-        }
-      }
-    }
-  }
+  int weight[MAX_WEIGHT_VALUE + 1];
+  int i;
 
+  memset(weight, 0, sizeof(int) * (MAX_WEIGHT_VALUE + 1));
   for (i = 0; i < count; i++) {
     network_backend_t *backend = network_backends_get(bs, i);
     if ((backend->type == BACKEND_TYPE_RO) &&
         (backend->state == BACKEND_STATE_UP ||
          backend->state == BACKEND_STATE_UNKNOWN)) {
-      if (proximity) {
-        if (i != proximity_index) {
-          continue;
-        }
-        backend->slave_proximity_hit_count =
-            backend->slave_proximity_hit_count + 1;
-        g_debug("%s:proximity, min_avg_resp_time:%f, candidate get conn from "
-                "backend:%s, count:%lld",
-                G_STRLOC, min_avg_resp_time, backend->addr->name->str,
-                backend->slave_proximity_hit_count);
+
+      g_debug("backend server weight:%d", backend->server_weight);
+      weight[backend->server_weight] = 1;
+    }
+  }
+
+  int max_weight = 0;
+  for (i = 0; i <= MAX_WEIGHT_VALUE; i++) {
+    if (weight[i]) {
+      max_weight = i;
+      g_debug("set max weight:%d, weigtht[i]:%d", i, weight[i]);
+    }
+  }
+
+  g_debug("max weight:%d", max_weight);
+  for (i = 0; i < count; i++) {
+    network_backend_t *backend = network_backends_get(bs, i);
+    if ((backend->type == BACKEND_TYPE_RO) &&
+        (backend->state == BACKEND_STATE_UP ||
+         backend->state == BACKEND_STATE_UNKNOWN)) {
+      if (backend->server_weight == max_weight) {
+        g_array_append_val(active_ro_indices, i);
       }
-      if (session_causal_read) {
-        if (!client_tracked_gtid) {
-          g_debug("client_tracked_gtid is nullptr");
-          break;
-        }
-        gtid_set_t *srv_gtids = NULL;
-        if (backend->use_gtid_index) {
-          srv_gtids = backend->last_update_gtid2;
-        } else {
-          srv_gtids = backend->last_update_gtid1;
-        }
-        if (!srv_gtids) {
-          g_debug("srv_gtids is nullptr");
-          break;
-        }
-        srv_gtids->in_use = 1;
-        int result = compare_gtid_set(srv_gtids, client_tracked_gtid);
-        if (result == GTID_LESSER || result == GTID_UNKNOWN) {
-          g_debug("gtid is not compatitable with backend:%s, result:%d",
-                  backend->addr->name->str, result);
-          srv_gtids->in_use = 0;
-          continue;
-        }
-        backend->slave_causal_read_hit_count =
-            backend->slave_causal_read_hit_count + 1;
-        srv_gtids->in_use = 0;
-        g_debug("gtid is compatitable with backend:%s, "
-                "slave_causal_read_hit_count:%f",
-                backend->addr->name->str, backend->slave_causal_read_hit_count);
-      } else {
-        g_debug("session_causal_read is false");
-      }
-      g_array_append_val(active_ro_indices, i);
     }
   }
   int num = active_ro_indices->len;
@@ -436,6 +409,96 @@ int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
   }
   g_array_free(active_ro_indices, TRUE);
   return result;
+}
+
+/* round robin choose read only backend */
+int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
+                                gtid_set_t *client_tracked_gtid,
+                                int proximity) {
+  if (bs->priority_mode) {
+    return network_backends_get_ro_ndx_by_priority(bs);
+  } else {
+
+    g_debug("%s:call network_backends_get_ro_ndx", G_STRLOC);
+    GArray *active_ro_indices = g_array_sized_new(FALSE, TRUE, sizeof(int), 4);
+    int count = network_backends_count(bs);
+    int i = 0;
+    int proximity_index = 0;
+    double min_avg_resp_time = LLONG_MAX;
+    if (proximity) {
+      for (i = 0; i < count; i++) {
+        network_backend_t *backend = network_backends_get(bs, i);
+        if ((backend->type == BACKEND_TYPE_RO) &&
+            (backend->state == BACKEND_STATE_UP ||
+             backend->state == BACKEND_STATE_UNKNOWN)) {
+          if (backend->last_avg_resp_time < min_avg_resp_time) {
+            min_avg_resp_time = backend->last_avg_resp_time;
+            proximity_index = i;
+          }
+        }
+      }
+    }
+
+    for (i = 0; i < count; i++) {
+      network_backend_t *backend = network_backends_get(bs, i);
+      if ((backend->type == BACKEND_TYPE_RO) &&
+          (backend->state == BACKEND_STATE_UP ||
+           backend->state == BACKEND_STATE_UNKNOWN)) {
+        if (proximity) {
+          if (i != proximity_index) {
+            continue;
+          }
+          backend->slave_proximity_hit_count =
+              backend->slave_proximity_hit_count + 1;
+          g_debug("%s:proximity, min_avg_resp_time:%f, candidate get conn from "
+                  "backend:%s, count:%lld",
+                  G_STRLOC, min_avg_resp_time, backend->addr->name->str,
+                  backend->slave_proximity_hit_count);
+        }
+        if (session_causal_read) {
+          if (!client_tracked_gtid) {
+            g_debug("client_tracked_gtid is nullptr");
+            break;
+          }
+          gtid_set_t *srv_gtids = NULL;
+          if (backend->use_gtid_index) {
+            srv_gtids = backend->last_update_gtid2;
+          } else {
+            srv_gtids = backend->last_update_gtid1;
+          }
+          if (!srv_gtids) {
+            g_debug("srv_gtids is nullptr");
+            break;
+          }
+          srv_gtids->in_use = 1;
+          int result = compare_gtid_set(srv_gtids, client_tracked_gtid);
+          if (result == GTID_LESSER || result == GTID_UNKNOWN) {
+            g_debug("gtid is not compatitable with backend:%s, result:%d",
+                    backend->addr->name->str, result);
+            srv_gtids->in_use = 0;
+            continue;
+          }
+          backend->slave_causal_read_hit_count =
+              backend->slave_causal_read_hit_count + 1;
+          srv_gtids->in_use = 0;
+          g_debug("gtid is compatitable with backend:%s, "
+                  "slave_causal_read_hit_count:%f",
+                  backend->addr->name->str,
+                  backend->slave_causal_read_hit_count);
+        } else {
+          g_debug("session_causal_read is false");
+        }
+        g_array_append_val(active_ro_indices, i);
+      }
+    }
+    int num = active_ro_indices->len;
+    int result = -1;
+    if (num > 0) {
+      result = g_array_index(active_ro_indices, int, (bs->read_count++) % num);
+    }
+    g_array_free(active_ro_indices, TRUE);
+    return result;
+  }
 }
 
 int network_backends_get_rw_ndx(network_backends_t *bs) {

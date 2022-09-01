@@ -2545,6 +2545,11 @@ show_proxy_read_only_backend_address(gpointer param) {
           old_backend->state != BACKEND_STATE_DELETED &&
           old_backend->state != BACKEND_STATE_MAINTAINING) {
         free_str = g_string_append(free_str, old_backend->address->str);
+        if (old_backend->server_weight) {
+          free_str = g_string_append(free_str, "#");
+          free_str =
+              g_string_append_c(free_str, '0' + old_backend->server_weight);
+        }
         free_str = g_string_append(free_str, ",");
       }
     }
@@ -2573,6 +2578,12 @@ show_proxy_backend_addresses(gpointer param) {
           old_backend->state != BACKEND_STATE_DELETED &&
           old_backend->state != BACKEND_STATE_MAINTAINING) {
         free_str = g_string_append(free_str, old_backend->address->str);
+        if (old_backend->server_weight) {
+          free_str = g_string_append(free_str, "#");
+          free_str =
+              g_string_append_c(free_str, '0' + old_backend->server_weight);
+        }
+
         free_str = g_string_append(free_str, ",");
       }
     }

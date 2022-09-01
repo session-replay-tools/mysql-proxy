@@ -43,6 +43,7 @@ typedef enum {
 
 #define NO_PREVIOUS_STATE -1
 #define PING_SAMPLE_NUM 30
+#define MAX_WEIGHT_VALUE 9
 
 typedef enum {
   BACKEND_TYPE_UNKNOWN,
@@ -100,6 +101,7 @@ typedef struct {
 
   backend_config *config;
 
+  int server_weight;
   time_t last_check_time;
   double last_avg_resp_time;
   long long slave_proximity_hit_count;
@@ -118,6 +120,7 @@ NETWORK_API int network_backend_init_extra(network_backend_t *b, chassis *chas);
 typedef struct {
   unsigned int ro_server_num;
   unsigned int read_count;
+  int priority_mode;
   GPtrArray *backends;
 #ifdef HAVE_OPENSSL
   RSA *rsa;
