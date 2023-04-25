@@ -62,7 +62,7 @@ void network_mysqld_com_query_result_free(
  */
 int network_mysqld_proto_get_com_query_result(
     network_packet *packet, network_mysqld_com_query_result_t *query,
-    gboolean use_binary_row_data) {
+    gboolean use_binary_row_data, gboolean read_session_tracked) {
   int is_finished = 0;
   guint8 status;
   int err = 0;
@@ -91,7 +91,8 @@ int network_mysqld_proto_get_com_query_result(
 
       ok_packet = network_mysqld_ok_packet_new();
 
-      err = network_mysqld_proto_get_ok_packet(packet, ok_packet);
+      err = network_mysqld_proto_get_ok_packet(packet, ok_packet,
+                                               read_session_tracked);
 
       if (!err) {
         if (!(ok_packet->server_status & SERVER_MORE_RESULTS_EXISTS)) {
@@ -791,12 +792,12 @@ int network_mysqld_proto_get_query_result(network_packet *packet,
      * there, too.
      */
     is_finished = network_mysqld_proto_get_com_query_result(
-        packet, con->parse.data, TRUE);
+        packet, con->parse.data, TRUE, con->srv->session_causal_read);
     break;
   case COM_PROCESS_INFO:
   case COM_QUERY:
     is_finished = network_mysqld_proto_get_com_query_result(
-        packet, con->parse.data, FALSE);
+        packet, con->parse.data, FALSE, con->srv->session_causal_read);
     break;
   case COM_BINLOG_DUMP:
     /**
@@ -924,7 +925,8 @@ void network_mysqld_ok_packet_free(network_mysqld_ok_packet_t *ok_packet) {
  * decode a OK packet from the network packet
  */
 int network_mysqld_proto_get_ok_packet(network_packet *packet,
-                                       network_mysqld_ok_packet_t *ok_packet) {
+                                       network_mysqld_ok_packet_t *ok_packet,
+                                       gboolean read_session_tracked) {
   guint8 field_count, sess_track_type;
   guint64 affected, insert_id;
   guint16 server_status, warning_count = 0, total_len = 0;
@@ -955,27 +957,31 @@ int network_mysqld_proto_get_ok_packet(network_packet *packet,
     ok_packet->server_status = server_status;
     ok_packet->warnings = warning_count;
     g_debug("%s: server status, got: %d", G_STRLOC, ok_packet->server_status);
-    if (server_status & SERVER_SESSION_STATE_CHANGED) {
-      err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
-      if (!err) {
-        if (total_len == 0) {
-          err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
-          err = err || network_mysqld_proto_get_int8(packet, &sess_track_type);
-          if (!err) {
-            if (sess_track_type == SESSION_TRACK_GTIDS) {
-              err = err ||
-                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
-              err = err ||
-                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
-              err = err ||
-                    network_mysqld_proto_get_lenenc_int(packet, &total_len);
+    if (read_session_tracked) {
+      if (server_status & SERVER_SESSION_STATE_CHANGED) {
+        err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
+        if (!err) {
+          if (total_len == 0) {
+            err =
+                err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
+            err =
+                err || network_mysqld_proto_get_int8(packet, &sess_track_type);
+            if (!err) {
+              if (sess_track_type == SESSION_TRACK_GTIDS) {
+                err = err ||
+                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
+                err = err ||
+                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
+                err = err ||
+                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
 
-              /* Read gtid info here */
-              gchar *gtid = NULL;
-              err = err ||
-                    network_mysqld_proto_get_str_len(packet, &gtid, total_len);
-              if (!err) {
-                ok_packet->gtid = gtid;
+                /* Read gtid info here */
+                gchar *gtid = NULL;
+                err = err || network_mysqld_proto_get_str_len(packet, &gtid,
+                                                              total_len);
+                if (!err) {
+                  ok_packet->gtid = gtid;
+                }
               }
             }
           }

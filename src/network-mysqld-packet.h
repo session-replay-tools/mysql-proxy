@@ -125,7 +125,7 @@ NETWORK_API void network_mysqld_com_query_result_free(network_mysqld_com_query_r
 NETWORK_API gboolean network_mysqld_com_query_result_is_local_infile(network_mysqld_com_query_result_t *);
 NETWORK_API int network_mysqld_proto_get_com_query_result(
     network_packet *packet, network_mysqld_com_query_result_t *udata,
-    gboolean use_binary_row_data);
+    gboolean use_binary_row_data, gboolean read_session_tracked);
 
 /**
  * tracking the response of a COM_STMT_PREPARE command
@@ -175,7 +175,10 @@ typedef struct {
 NETWORK_API network_mysqld_ok_packet_t *network_mysqld_ok_packet_new(void);
 NETWORK_API void network_mysqld_ok_packet_free(network_mysqld_ok_packet_t *udata);
 
-NETWORK_API int network_mysqld_proto_get_ok_packet(network_packet *, network_mysqld_ok_packet_t *);
+NETWORK_API int
+network_mysqld_proto_get_ok_packet(network_packet *,
+                                   network_mysqld_ok_packet_t *,
+                                   gboolean read_session_tracked);
 NETWORK_API int network_mysqld_proto_append_ok_packet(GString *, network_mysqld_ok_packet_t *);
 
 typedef struct {

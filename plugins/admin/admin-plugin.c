@@ -468,7 +468,7 @@ static int merge_for_modify(network_mysqld_con *con, GPtrArray *recv_queues,
       network_packet packet = {pkt, 0};
       network_mysqld_ok_packet_t one_ok;
       network_mysqld_proto_skip_network_header(&packet);
-      if (!network_mysqld_proto_get_ok_packet(&packet, &one_ok)) {
+      if (!network_mysqld_proto_get_ok_packet(&packet, &one_ok, FALSE)) {
         total_affected_rows += one_ok.affected_rows;
         total_warnings += one_ok.warnings;
       }
