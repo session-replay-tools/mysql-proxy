@@ -68,9 +68,7 @@ static void mysql_conn_free(gpointer e) {
   }
 }
 
-
-static MYSQL *
-get_mysql_connection(cetus_monitor_t *monitor, char *addr) {
+static MYSQL *get_mysql_connection(cetus_monitor_t *monitor, const char *addr) {
   MYSQL *conn = g_hash_table_lookup(monitor->backend_conns, addr);
   if (conn) {
     if (mysql_ping(conn) == 0) {
@@ -551,7 +549,7 @@ group_replication_retrieve_gtid(struct chassis *srv, MYSQL *conn,
 #ifdef USE_GLIB_DEBUG_LOG
   if (executed_gtid_set) {
     for (int i = 0; i < executed_gtid_set->num; i++) {
-      g_debug("gtid from backend:%s, interval:%d, min:%lld, max:%lld",
+      g_debug("gtid from backend:%s, interval:%d, min:%ld, max:%ld",
               backend_addr, i + 1, executed_gtid_set->gtids[i].min,
               executed_gtid_set->gtids[i].max);
     }

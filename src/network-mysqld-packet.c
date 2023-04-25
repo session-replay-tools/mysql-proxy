@@ -928,8 +928,8 @@ int network_mysqld_proto_get_ok_packet(network_packet *packet,
                                        network_mysqld_ok_packet_t *ok_packet,
                                        gboolean read_session_tracked) {
   guint8 field_count, sess_track_type;
-  guint64 affected, insert_id;
-  guint16 server_status, warning_count = 0, total_len = 0;
+  guint64 affected, insert_id, total_len = 0;
+  guint16 server_status, warning_count = 0;
   guint32 capabilities = CLIENT_PROTOCOL_41;
 
   int err = 0;
@@ -959,27 +959,28 @@ int network_mysqld_proto_get_ok_packet(network_packet *packet,
     g_debug("%s: server status, got: %d", G_STRLOC, ok_packet->server_status);
     if (read_session_tracked) {
       if (server_status & SERVER_SESSION_STATE_CHANGED) {
-        err = err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
-        if (!err) {
+        int deep_err =
+            err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
+        if (!deep_err) {
           if (total_len == 0) {
-            err =
-                err || network_mysqld_proto_get_lenenc_int(packet, &total_len);
-            err =
-                err || network_mysqld_proto_get_int8(packet, &sess_track_type);
-            if (!err) {
+            deep_err = deep_err ||
+                       network_mysqld_proto_get_lenenc_int(packet, &total_len);
+            deep_err = deep_err ||
+                       network_mysqld_proto_get_int8(packet, &sess_track_type);
+            if (!deep_err) {
               if (sess_track_type == SESSION_TRACK_GTIDS) {
-                err = err ||
-                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
-                err = err ||
-                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
-                err = err ||
-                      network_mysqld_proto_get_lenenc_int(packet, &total_len);
+                deep_err = deep_err || network_mysqld_proto_get_lenenc_int(
+                                           packet, &total_len);
+                deep_err = deep_err || network_mysqld_proto_get_lenenc_int(
+                                           packet, &total_len);
+                deep_err = deep_err || network_mysqld_proto_get_lenenc_int(
+                                           packet, &total_len);
 
                 /* Read gtid info here */
                 gchar *gtid = NULL;
-                err = err || network_mysqld_proto_get_str_len(packet, &gtid,
-                                                              total_len);
-                if (!err) {
+                deep_err = deep_err || network_mysqld_proto_get_str_len(
+                                           packet, &gtid, total_len);
+                if (!deep_err) {
                   ok_packet->gtid = gtid;
                 }
               }

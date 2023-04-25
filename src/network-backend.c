@@ -482,7 +482,7 @@ int network_backends_get_ro_ndx(network_backends_t *bs, int session_causal_read,
               backend->slave_causal_read_hit_count + 1;
           srv_gtids->in_use = 0;
           g_debug("gtid is compatitable with backend:%s, "
-                  "slave_causal_read_hit_count:%f",
+                  "slave_causal_read_hit_count:%lld",
                   backend->addr->name->str,
                   backend->slave_causal_read_hit_count);
         } else {
@@ -715,7 +715,7 @@ gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
         gtid_set->gtids[count].max = max;
         gtid_set->gtids[count].min = min;
         count++;
-        g_debug("add gtid interval, max:%lld, min:%lld", max, min);
+        g_debug("add gtid interval, max:%ld, min:%ld", max, min);
         min = 0;
       } else {
         free_gtid_set(gtid_set);
@@ -745,12 +745,12 @@ gtid_set_t *get_gtid_interval(const char *orig_gtid, const char *group_name,
   if (count < gtid_set->size) {
     gtid_set->gtids[count].max = max;
     gtid_set->gtids[count].min = min;
-    g_debug("add gtid interval, max:%lld, min:%lld", max, min);
+    g_debug("add gtid interval, max:%ld, min:%ld", max, min);
 
 #ifdef USE_GLIB_DEBUG_LOG
     int i;
     for (i = 0; i <= count; i++) {
-      g_debug("gtid interval, max:%lld, min:%lld, count:%d",
+      g_debug("gtid interval, max:%ld, min:%ld, count:%d",
               gtid_set->gtids[i].max, gtid_set->gtids[i].min, count);
     }
 #endif
