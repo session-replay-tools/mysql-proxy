@@ -21,7 +21,7 @@ Cetus, originally developed from MySQL Proxy, is a high-performance, stable, and
 ### 3. Installation Guide
 `make install`
 
-### 4. How to Run"
+### 4. How to Run
 1. Go to /home/user/cetus_mgr_install/conf
 2. cp proxy.conf.example proxy.conf
 3. Modify proxy.conf 
